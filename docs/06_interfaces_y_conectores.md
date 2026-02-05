@@ -132,3 +132,24 @@ Notas:
 2) Definir etapas de salida: PWM directo vs drivers integrados.
 3) Definir estándar físico exacto de los conectores (tipo de RJ11, DB9/DB25, jack).
 4) Definir ubicación en PCB usando el placement original como referencia.
+
+## Decisión sobre D0/D1 (Serial0) — Perfil legacy vs perfil Fase 2
+
+Motivo:
+En Arduino Mega, D0/D1 corresponden a Serial0 (RX0/TX0). Usarlos para señales de control puede interferir con:
+- programación,
+- monitor serie,
+- depuración.
+
+Decisión:
+- Se implementarán 2 perfiles de pines:
+  - Perfil LEGACY (compatibilidad total): mantiene alarmPin=D0 y desativarFanPin=D1.
+  - Perfil FASE2 (recomendado): reasigna alarmPin y desativarFanPin para liberar Serial0.
+
+Propuesta de pines alternativos (FASE2):
+- alarmPin → D14
+- desativarFanPin → D15
+
+Notas:
+- D14/D15 no chocan con SPI (50–53), I2C (20–21), TFT paralela (22–41), Touch (3–7), 1-Wire (49) ni con los PWM usados por LEDs (8–12) y fan (13).
+- Si en el futuro se usa Serial3, se podrá cambiar esta asignación sin romper el perfil legacy.
