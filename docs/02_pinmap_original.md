@@ -27,11 +27,11 @@ Pines SPI del Mega:
 - 53 → SS (general)
 
 Chip Select identificados en el esquema:
-- SS Ethernet → ?
-- SS RF → ?
-- SS SD → ?
-- SS TFT → ?
-- SS Touch → ?
+- SS Ethernet → D53
+- SS RF (SS RFM12) → A15
+- SS SD (SD CHIP SELECT) → D5
+- SS TFT → (pendiente)
+- SS Touch → D3..D7 (TOUCH SCREEN usa D3 hasta D7)
 
 ---
 
@@ -111,6 +111,8 @@ Pin:
 
 ---
 
-## RF
+## RF (RFM12B)
 
-- RFM12B → SPI + ?
+- Interrupt → D2 (RFM12B INTERRUPT)
+- SS (CS) → A15 (SS RFM12)
+- SPI bus → D50/D51/D52
