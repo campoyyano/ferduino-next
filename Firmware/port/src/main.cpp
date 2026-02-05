@@ -30,8 +30,12 @@ void loop() {
   // app_gpio_smoketest_run();
 
   // A3: test con pines reales Ferduino
-  //app_ferduino_pins_smoketest_run();
+  // app_ferduino_pins_smoketest_run();
 
   // A4: test con pwm pines reales arduino
-   app_pwm_leds_smoketest_run(); 
+  // app_pwm_leds_smoketest_run(); 
+
+   //A5: Test del PCF8575
+   // app_pcf8575_smoketest_run();
+    app_ioexpander_smoketest_run();
 }
