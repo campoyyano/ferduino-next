@@ -5,6 +5,8 @@
 #include "hal_time.h"
 #include "hal_log.h"
 
+void app_gpio_smoketest_run();
+
 void setup() {
   Serial.begin(115200);
 
@@ -14,6 +16,8 @@ void setup() {
   Serial.println("ferduino-next: port skeleton");
   Serial.print("Perfil de pines: ");
   Serial.println(PINS_PROFILE);
+  app_gpio_smoketest_run();
+
 }
 
 void loop() {
