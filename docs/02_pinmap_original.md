@@ -257,3 +257,62 @@ Las resistencias pull-up estarán habilitadas mediante solder-jumper para poder 
 - La lógica de control funcionará a 3.3V
 - La potencia funcionará a 5V o 12V según el dispositivo
 - Usar drivers que acepten control desde 3.3V
+
+---
+
+## Arquitectura de buses de la nueva shield (Fase 2)
+
+Objetivo:
+Reducir el uso directo de pines del Arduino y basar el sistema en buses estándar.
+
+Esto permitirá:
+- Compatibilidad con Mega / Due / Giga
+- Reducir complejidad del PCB
+- Facilitar futuras ampliaciones
+- Sustituir la TFT paralela por una SPI en el futuro
+
+### Bus I2C (principal para expansión)
+Se usará para:
+- PCF8575 (salidas digitales)
+- RTC
+- FRAM futura (opcional)
+
+Pines Arduino:
+- SDA → D20
+- SCL → D21
+
+Características:
+- Todo funcionando a 3.3V
+- Pull-ups configurables por solder-jumper
+- Direcciones configurables (PCF8575 con A0/A1/A2)
+
+### Bus SPI (periféricos de alta velocidad)
+Se usará para:
+- Ethernet
+- RF
+- SD
+- Pantalla SPI futura
+
+Pines Arduino:
+- MISO → D50
+- MOSI → D51
+- SCK  → D52
+
+Chip Select independientes:
+- CS Ethernet
+- CS RF
+- CS SD
+- CS TFT (futuro)
+
+Todos los CS estarán protegidos mediante buffers 74LVC para compatibilidad 5V/3.3V.
+
+### Bus 1-Wire
+Se usará para:
+- Sensores DS18B20 (temperatura)
+
+Pin Arduino:
+- D49 (como en el diseño original)
+
+Características:
+- Pull-up a 3.3V
+- Posible conector dedicado en la shield
