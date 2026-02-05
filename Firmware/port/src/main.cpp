@@ -1,5 +1,9 @@
 #include <Arduino.h>
+
 #include "pins_profiles.h"
+#include "hal_gpio.h"
+#include "hal_time.h"
+#include "hal_log.h"
 
 void setup() {
   Serial.begin(115200);
