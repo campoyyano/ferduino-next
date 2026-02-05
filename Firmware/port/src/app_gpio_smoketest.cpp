@@ -8,20 +8,16 @@
 // - Pero accediendo a HW a través de HAL
 // - Sin implementar lógica del acuario todavía
 
-static void configurarSalidasBasicas() {
-  // Ejemplo: un par de salidas conocidas (LEDs) y moonlight
-  hal::modoPin(ledPinUV, hal::PinMode::Salida);
-  hal::modoPin(ledPinMoon, hal::PinMode::Salida);
-}
-
-static void parpadeoPrueba() {
-  hal::escribirPin(ledPinUV, true);
-  hal::delayMs(200);
-  hal::escribirPin(ledPinUV, false);
-  hal::delayMs(800);
-}
+// Test mínimo sin depender del pinout Ferduino.
+// LED onboard del Mega: D13
+static const uint8_t PIN_TEST = 13;
 
 void app_gpio_smoketest_run() {
-  configurarSalidasBasicas();
-  parpadeoPrueba();
+  hal::modoPin(PIN_TEST, hal::PinMode::Salida);
+
+  hal::escribirPin(PIN_TEST, true);
+  hal::delayMs(200);
+
+  hal::escribirPin(PIN_TEST, false);
+  hal::delayMs(800);
 }
