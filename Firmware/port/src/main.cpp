@@ -35,7 +35,11 @@ void loop() {
   // A4: test con pwm pines reales arduino
   // app_pwm_leds_smoketest_run(); 
 
-   //A5: Test del PCF8575
-   // app_pcf8575_smoketest_run();
+  //A5: Test del PCF8575
+  // app_pcf8575_smoketest_run();
     app_ioexpander_smoketest_run();
+
+  // A6: Test Uart/Debug
+    app_serial_smoketest_run();
+
 }
