@@ -126,7 +126,12 @@ El firmware define las señales como índices P0..P12 del PCF8575:
 | P11 | `alimentadorPin` | Alimentador automático |
 | P12 | `skimmerPin` | Skimmer |
 
-> Pendiente: dirección I2C del PCF8575 en el diseño original (se verifica en el esquemático).
+## PCF8575 (I2C expander) - Addressing
+
+- Address range: 0x20..0x27 via A2:A1:A0
+- Default address: 0x20 (A2=A1=A0=0)
+- Implementation: each Ax has 100k pulldown to GND + solder jumper to VCC (3.3V) to set '1'
+- I2C pull-ups: 4.7k to 3.3V on SDA/SCL, enabled via solder jumper SJ_I2C_PU
 
 ---
 
