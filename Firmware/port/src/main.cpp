@@ -42,4 +42,8 @@ void loop() {
   // A6: Test Uart/Debug
     app_serial_smoketest_run();
 
+  // A7: Test RTC
+    app_rtc_smoketest_run();
+
+
 }
