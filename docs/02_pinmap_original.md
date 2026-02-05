@@ -76,6 +76,34 @@ Pin:
 
 ---
 
+## Conectores externos (según PinMap.pdf)
+
+### DB9 (LEDS)
+- D8
+- D9
+- D10
+- D11
+- D12
+- D44
+- GND
+
+### RJ11 (COOLERS)
+- D13
+- D1
+- GND
+
+### RJ11 (WAVEMAKER)
+- D45
+- D46
+- 5V
+- GND
+
+### Jack 3.5mm (DS18B20)
+- DATA: (pendiente pin Mega)
+- VCC + GND
+
+---
+
 ## Pantalla
 
 - TFT data/control → ?
