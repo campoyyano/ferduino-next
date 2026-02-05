@@ -2,6 +2,7 @@
 //#include "ferduino_original_config.h" // pines originales
 #include "hal_gpio.h"
 #include "hal_time.h"
+#include "pins.h"
 
 // Objetivo:
 // - Probar que podemos usar los pines del firmware original

@@ -4,8 +4,8 @@
 #include "hal_gpio.h"
 #include "hal_time.h"
 #include "hal_log.h"
+#include "app_smoketests.h"
 
-void app_gpio_smoketest_run();
 
 void setup() {
   Serial.begin(115200);
@@ -16,8 +16,7 @@ void setup() {
   Serial.println("ferduino-next: port skeleton");
   Serial.print("Perfil de pines: ");
   Serial.println(PINS_PROFILE);
-  app_gpio_smoketest_run();
-
+  
 }
 
 void loop() {
@@ -26,4 +25,10 @@ void loop() {
   delay(200);
   digitalWrite(alarmPin, LOW);
   delay(800);
+
+   // A2: test mínimo (LED D13)
+  // app_gpio_smoketest_run();
+
+  // A3: test con pines reales Ferduino
+  app_ferduino_pins_smoketest_run();
 }
