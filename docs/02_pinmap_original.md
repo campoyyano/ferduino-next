@@ -171,6 +171,12 @@ El firmware define las señales como índices P0..P12 del PCF8575:
 
 > Pendiente: detallar exactamente DB0..DB15 + señales RS/WR/RD/RST dentro del rango D22..D41 a partir del esquemático.
 
+### Selección de CS para SD (según Configuration.h)
+- Por defecto: SD_CS = D5 (compartido con touch reservado)
+- Opción Ethernet shield: CS = D4 si se activa USE_PIN_4_FOR_SD_CARD
+- Opción TFT shield: CS = D53 si se activa USE_PIN_53_FOR_SD_CARD (NO usar en Ferduino Mega 2560 según comentario del autor)
+- SD_CARD_SPEED por defecto: SPI_HALF_SPEED
+
 ---
 
 ## SD Card (punto crítico)
