@@ -16,6 +16,11 @@ namespace pins {
 
    // -------- LEDs ----------
   static const uint8_t ledPinUV      = pins_base::ledPinUV;
+  static const uint8_t ledPinBlue    = pins_base::ledPinBlue;
+  static const uint8_t ledPinWhite   = pins_base::ledPinWhite;
+  static const uint8_t ledPinRoyBlue = pins_base::ledPinRoyBlue;
+  static const uint8_t ledPinRed     = pins_base::ledPinRed;
+  static const uint8_t fanPin        = pins_base::fanPin;
   static const uint8_t ledPinMoon    = pins_base::ledPinMoon;
 
   // -------- perfil ----------

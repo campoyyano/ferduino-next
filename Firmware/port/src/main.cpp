@@ -26,9 +26,12 @@ void loop() {
   digitalWrite(alarmPin, LOW);
   delay(800);
 
-   // A2: test mínimo (LED D13)
+  // A2: test mínimo (LED D13)
   // app_gpio_smoketest_run();
 
   // A3: test con pines reales Ferduino
-  app_ferduino_pins_smoketest_run();
+  //app_ferduino_pins_smoketest_run();
+
+  // A4: test con pwm pines reales arduino
+   app_pwm_leds_smoketest_run(); 
 }
