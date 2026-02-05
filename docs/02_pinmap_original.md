@@ -104,10 +104,19 @@ Pin:
 
 ---
 
-## Pantalla
+## Pantalla TFT (control)
+- TFT_RS → A0
+- TFT_WR → A1
+- TFT_RD → A2
+- TFT_RESET → A3
+- SD_PRESENT → A4
+- LED_PIN → A5
+- TFT D/C (control) → A8
 
-- TFT data/control → ?
-- Touch → ?
+Bus SPI compartido:
+- MISO → D50
+- MOSI → D51
+- SCK  → D52
 
 ---
 
