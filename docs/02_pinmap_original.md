@@ -209,3 +209,51 @@ Acción en el rediseño:
 - Señales exactas TFT dentro de D22..D41 (DBx + control).
 - Qué tipo de touch exacto (resistivo analógico vs controlador SPI) y si se usa SPI real o solo pines dedicados.
 - Confirmar si hay alguna segunda SD (por módulos/shields) en el diseño original.
+
+---
+
+## Estrategia de niveles lógicos (compatible Mega / Due / Giga)
+
+Regla principal:
+Toda la electrónica de la shield funcionará a 3.3V a nivel lógico.
+
+Motivo:
+- Arduino Due y Giga trabajan a 3.3V
+- El Mega puede leer correctamente un HIGH de 3.3V
+- Evitamos rediseños futuros
+
+### SPI
+Dirección Mega (5V) → periféricos (3.3V):
+- SCK
+- MOSI
+- Todas las líneas CS
+
+Solución:
+- Usar buffers tipo 74LVC (alimentados a 3.3V) para bajar nivel de 5V a 3.3V.
+
+Dirección periféricos → Arduino:
+- MISO
+- INT
+
+No necesitan conversión:
+- 3.3V se detecta como HIGH en Mega
+- Es nivel nativo para Due/Giga
+
+### I2C
+- Pull-ups a 3.3V
+- PCF8575 alimentado a 3.3V
+- RTC alimentado a 3.3V
+- FRAM (si se usa) a 3.3V
+
+El Mega funciona correctamente con I2C a 3.3V.
+
+Las resistencias pull-up estarán habilitadas mediante solder-jumper para poder desactivarlas si existen otras en el sistema.
+
+### 1-Wire (sensores DS18B20)
+- Línea DATA a 3.3V con pull-up
+- Compatible con Mega/Due/Giga
+
+### Etapas de potencia (relés, bombas, etc.)
+- La lógica de control funcionará a 3.3V
+- La potencia funcionará a 5V o 12V según el dispositivo
+- Usar drivers que acepten control desde 3.3V
