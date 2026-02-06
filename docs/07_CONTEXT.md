@@ -1,5 +1,26 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+## Estado actual del port (Firmware/port)
+
+- El port es un proyecto PlatformIO limpio, desacoplado del firmware original de Ferduino.
+- `Firmware/Original` se mantiene únicamente como referencia y **no debe incluirse** desde el port.
+- Tras la reorganización de carpetas, el proyecto compila correctamente.
+
+### Organización del código
+
+- `Firmware/port/include/hal/`  
+  Interfaces públicas de la HAL (sin includes dependientes de plataforma).
+
+- `Firmware/port/src/hal/impl/mega2560/`  
+  Implementaciones concretas de la HAL para Arduino Mega 2560.
+
+- `Firmware/port/src/app/smoketests/`  
+  Pruebas de integración simples para validar cada HAL de forma aislada.
+
+- `Firmware/port/src/main.cpp`  
+  Punto de entrada del firmware (selección de smoketests o lógica de aplicación).
+
+
 ## Objetivo general
 Portar el firmware original del Ferduino (Arduino Mega 2560) a una arquitectura
 moderna basada en HAL, manteniendo compatibilidad con el hardware original
