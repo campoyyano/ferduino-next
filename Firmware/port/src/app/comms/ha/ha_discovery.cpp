@@ -1,14 +1,11 @@
 #include "app/comms/ha/ha_discovery.h"
 
+#include "app/config/app_config.h"
 #include "hal/hal_mqtt.h"
 
 #include <Arduino.h>
 #include <string.h>
 #include <stdio.h>
-
-#ifndef FERDUINO_DEVICE_ID
-  #error "FERDUINO_DEVICE_ID must be defined in platformio.ini build_flags"
-#endif
 
 namespace app::ha {
 
@@ -20,7 +17,7 @@ static void publishRetained(const char* topic, const char* payload) {
   (void)hal::mqtt().publish(topic, (const uint8_t*)payload, strlen(payload), true);
 }
 
-static void buildDeviceJson(char* out, size_t outLen) {
+static void buildDeviceJson(const char* deviceId, char* out, size_t outLen) {
   snprintf(out, outLen,
            "{"
              "\"identifiers\":[\"%s\"],"
@@ -29,33 +26,35 @@ static void buildDeviceJson(char* out, size_t outLen) {
              "\"name\":\"Ferduino Next\","
              "\"sw_version\":\"ferduino-next\""
            "}",
-           FERDUINO_DEVICE_ID);
+           deviceId ? deviceId : "");
 }
 
-static void buildTopics(char* stateTopic, size_t stLen,
+static void buildTopics(const char* deviceId,
+                        char* stateTopic, size_t stLen,
                         char* availTopic, size_t avLen) {
-  snprintf(stateTopic, stLen, "%s/%s/state", BASE_TOPIC, FERDUINO_DEVICE_ID);
-  snprintf(availTopic, avLen, "%s/%s/availability", BASE_TOPIC, FERDUINO_DEVICE_ID);
+  snprintf(stateTopic, stLen, "%s/%s/state", BASE_TOPIC, deviceId ? deviceId : "");
+  snprintf(availTopic, avLen, "%s/%s/availability", BASE_TOPIC, deviceId ? deviceId : "");
 }
 
-static void publishSensor(const char* objectId,
+static void publishSensor(const char* deviceId,
+                          const char* objectId,
                           const char* name,
                           const char* uniqueSuffix,
-                          const char* devClass,   // puede ser "" si no aplica
-                          const char* unit,       // puede ser "" si no aplica
+                          const char* devClass,       // "" si no aplica
+                          const char* unit,           // "" si no aplica
                           const char* valueTemplate) {
-  char topic[180];
+  char topic[200];
   snprintf(topic, sizeof(topic),
            "%s/sensor/ferduino_%s/%s/config",
-           DISCOVERY_PREFIX, FERDUINO_DEVICE_ID, objectId);
+           DISCOVERY_PREFIX, deviceId, objectId);
 
   char stateTopic[96], availTopic[96];
-  buildTopics(stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
+  buildTopics(deviceId, stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
 
   char device[220];
-  buildDeviceJson(device, sizeof(device));
+  buildDeviceJson(deviceId, device, sizeof(device));
 
-  char payload[640];
+  char payload[700];
 
   if (devClass && devClass[0] && unit && unit[0]) {
     snprintf(payload, sizeof(payload),
@@ -72,7 +71,7 @@ static void publishSensor(const char* objectId,
                "\"dev\":%s"
              "}",
              name,
-             FERDUINO_DEVICE_ID, uniqueSuffix,
+             deviceId, uniqueSuffix,
              stateTopic,
              availTopic,
              devClass,
@@ -93,7 +92,7 @@ static void publishSensor(const char* objectId,
                "\"dev\":%s"
              "}",
              name,
-             FERDUINO_DEVICE_ID, uniqueSuffix,
+             deviceId, uniqueSuffix,
              stateTopic,
              availTopic,
              devClass,
@@ -113,7 +112,7 @@ static void publishSensor(const char* objectId,
                "\"dev\":%s"
              "}",
              name,
-             FERDUINO_DEVICE_ID, uniqueSuffix,
+             deviceId, uniqueSuffix,
              stateTopic,
              availTopic,
              unit,
@@ -132,7 +131,7 @@ static void publishSensor(const char* objectId,
                "\"dev\":%s"
              "}",
              name,
-             FERDUINO_DEVICE_ID, uniqueSuffix,
+             deviceId, uniqueSuffix,
              stateTopic,
              availTopic,
              valueTemplate,
@@ -142,74 +141,45 @@ static void publishSensor(const char* objectId,
   publishRetained(topic, payload);
 }
 
-static void publishBinarySensor(const char* objectId,
-                                const char* name,
-                                const char* uniqueSuffix,
-                                const char* valueTemplate) {
-  char topic[190];
-  snprintf(topic, sizeof(topic),
-           "%s/binary_sensor/ferduino_%s/%s/config",
-           DISCOVERY_PREFIX, FERDUINO_DEVICE_ID, objectId);
-
-  char stateTopic[96], availTopic[96];
-  buildTopics(stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
-
-  char device[220];
-  buildDeviceJson(device, sizeof(device));
-
-  char payload[560];
-  snprintf(payload, sizeof(payload),
-           "{"
-             "\"name\":\"%s\","
-             "\"uniq_id\":\"ferduino_%s_%s\","
-             "\"stat_t\":\"%s\","
-             "\"avty_t\":\"%s\","
-             "\"pl_avail\":\"online\","
-             "\"pl_not_avail\":\"offline\","
-             "\"val_tpl\":\"%s\","
-             "\"dev\":%s"
-           "}",
-           name,
-           FERDUINO_DEVICE_ID, uniqueSuffix,
-           stateTopic,
-           availTopic,
-           valueTemplate,
-           device);
-
-  publishRetained(topic, payload);
-}
-
 static void publishAllEntities() {
+  // Cinturón y tirantes: si todavía no se cargó cfg (no hay setup() global),
+  // garantizamos defaults.
+  if (app::cfg::get().mqtt.deviceId[0] == '\0') {
+    (void)app::cfg::loadOrDefault();
+  }
+
+  const auto& cfg = app::cfg::get();
+  const char* deviceId = cfg.mqtt.deviceId;
+
   // Temperaturas
-  publishSensor("temp_water",    "Water Temp",    "temp_water",    "temperature", "°C", "{{ value_json.water_temperature }}");
-  publishSensor("temp_heatsink", "Heatsink Temp", "temp_heatsink", "temperature", "°C", "{{ value_json.heatsink_temperature }}");
-  publishSensor("temp_ambient",  "Ambient Temp",  "temp_ambient",  "temperature", "°C", "{{ value_json.ambient_temperature }}");
+  publishSensor(deviceId, "temp_water",    "Water Temp",    "temp_water",    "temperature", "°C", "{{ value_json.water_temperature }}");
+  publishSensor(deviceId, "temp_heatsink", "Heatsink Temp", "temp_heatsink", "temperature", "°C", "{{ value_json.heatsink_temperature }}");
+  publishSensor(deviceId, "temp_ambient",  "Ambient Temp",  "temp_ambient",  "temperature", "°C", "{{ value_json.ambient_temperature }}");
 
   // Química
-  publishSensor("water_ph",   "Water pH",   "water_ph",   "", "", "{{ value_json.water_ph }}");
-  publishSensor("reactor_ph", "Reactor pH", "reactor_ph", "", "", "{{ value_json.reactor_ph }}");
-  publishSensor("orp",        "ORP",        "orp",        "", "mV", "{{ value_json.orp }}");
-  publishSensor("salinity",   "Salinity",   "salinity",   "", "", "{{ value_json.salinity }}");
+  publishSensor(deviceId, "water_ph",   "Water pH",   "water_ph",   "", "", "{{ value_json.water_ph }}");
+  publishSensor(deviceId, "reactor_ph", "Reactor pH", "reactor_ph", "", "", "{{ value_json.reactor_ph }}");
+  publishSensor(deviceId, "orp",        "ORP",        "orp",        "", "mV", "{{ value_json.orp }}");
+  publishSensor(deviceId, "salinity",   "Salinity",   "salinity",   "", "", "{{ value_json.salinity }}");
 
   // LEDs
-  publishSensor("led_white",      "LED White",      "led_white",      "", "", "{{ value_json.led_white_power }}");
-  publishSensor("led_blue",       "LED Blue",       "led_blue",       "", "", "{{ value_json.led_blue_power }}");
-  publishSensor("led_royal_blue", "LED Royal Blue", "led_royal_blue", "", "", "{{ value_json.led_royal_blue_power }}");
-  publishSensor("led_red",        "LED Red",        "led_red",        "", "", "{{ value_json.led_red_power }}");
-  publishSensor("led_uv",         "LED UV",         "led_uv",         "", "", "{{ value_json.led_uv_power }}");
+  publishSensor(deviceId, "led_white",      "LED White",      "led_white",      "", "", "{{ value_json.led_white_power }}");
+  publishSensor(deviceId, "led_blue",       "LED Blue",       "led_blue",       "", "", "{{ value_json.led_blue_power }}");
+  publishSensor(deviceId, "led_royal_blue", "LED Royal Blue", "led_royal_blue", "", "", "{{ value_json.led_royal_blue_power }}");
+  publishSensor(deviceId, "led_red",        "LED Red",        "led_red",        "", "", "{{ value_json.led_red_power }}");
+  publishSensor(deviceId, "led_uv",         "LED UV",         "led_uv",         "", "", "{{ value_json.led_uv_power }}");
 
   // Uptime
-  publishSensor("uptime", "Uptime", "uptime", "", "s", "{{ value_json.uptime }}");
+  publishSensor(deviceId, "uptime", "Uptime", "uptime", "", "s", "{{ value_json.uptime }}");
 
-    // Outlets como switch (B2.3)
+  // Outlets como switch (B2.3)
   // command_topic: ferduino/<id>/cmd/outlet/N (payload "1"/"0")
   // state: value_json.outlet_N
-
   for (int n = 1; n <= 9; n++) {
     char objectId[16];
     char name[20];
     char uniq[16];
-    char topic[190];
+    char topic[220];
 
     snprintf(objectId, sizeof(objectId), "outlet_%d", n);
     snprintf(name, sizeof(name), "Outlet %d", n);
@@ -217,18 +187,18 @@ static void publishAllEntities() {
 
     snprintf(topic, sizeof(topic),
              "%s/switch/ferduino_%s/%s/config",
-             DISCOVERY_PREFIX, FERDUINO_DEVICE_ID, objectId);
+             DISCOVERY_PREFIX, deviceId, objectId);
 
     char stateTopic[96], availTopic[96];
-    buildTopics(stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
+    buildTopics(deviceId, stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
 
     char cmdTopic[96];
-    snprintf(cmdTopic, sizeof(cmdTopic), "%s/%s/cmd/outlet/%d", BASE_TOPIC, FERDUINO_DEVICE_ID, n);
+    snprintf(cmdTopic, sizeof(cmdTopic), "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, n);
 
     char device[220];
-    buildDeviceJson(device, sizeof(device));
+    buildDeviceJson(deviceId, device, sizeof(device));
 
-    char payload[700];
+    char payload[720];
     snprintf(payload, sizeof(payload),
              "{"
                "\"name\":\"%s\","
@@ -244,7 +214,7 @@ static void publishAllEntities() {
                "\"dev\":%s"
              "}",
              name,
-             FERDUINO_DEVICE_ID, uniq,
+             deviceId, uniq,
              stateTopic,
              cmdTopic,
              availTopic,
@@ -253,7 +223,6 @@ static void publishAllEntities() {
 
     publishRetained(topic, payload);
   }
-
 }
 
 void publishDiscoveryMinimal() {

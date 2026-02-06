@@ -1,5 +1,18 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] B3.3 – HA Discovery runtime (deviceId desde EEPROM)
+
+- `ha_discovery` deja de depender de macros (`FERDUINO_DEVICE_ID`) y usa `app::cfg::get().mqtt.deviceId`.
+- Topics de HA discovery quedan alineados con backend HA:
+  - `ferduino/<deviceId>/state`
+  - `ferduino/<deviceId>/availability`
+  - `ferduino/<deviceId>/cmd/outlet/<n>` (switch outlets 1..9)
+- `publishDiscoveryMinimal()/All()` publica configuración retained usando `device`/`uniq_id` derivados del `deviceId` runtime.
+- Compilación verificada: **compila en mega2560_port**.
+
+Estado: **B3.3 COMPLETADO**
+
+
 ### [2026-02-06] B3.2 – Selector runtime de backend + MQTT desde EEPROM (sin setup global)
 
 - `app::comms()` deja de depender de `#if FERDUINO_COMMS_MODE` y selecciona backend en runtime usando:
