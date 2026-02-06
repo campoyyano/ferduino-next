@@ -1,6 +1,7 @@
 #include "app/comms/comms_ha_backend.h"
-
+#include "app/comms/ha/ha_outlet_control.h"
 #include "app/comms/ha/ha_discovery.h"
+
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
 
@@ -39,10 +40,14 @@ public:
     snprintf(_stateTopic, sizeof(_stateTopic), "%s/%s/state", BASE_TOPIC, FERDUINO_DEVICE_ID);
     snprintf(_availTopic, sizeof(_availTopic), "%s/%s/availability", BASE_TOPIC, FERDUINO_DEVICE_ID);
 
-    // Suscripciones de comandos (B1: solo outlet/1)
-    snprintf(_cmdOutlet1Topic, sizeof(_cmdOutlet1Topic), "%s/%s/cmd/outlet/1", BASE_TOPIC, FERDUINO_DEVICE_ID);
+    // Suscripciones de comandos: outlets 1..9 (B2.3)
+    for (int i = 1; i <= 9; i++) {
+      snprintf(_cmdOutletTopic[i], sizeof(_cmdOutletTopic[i]),
+               "%s/%s/cmd/outlet/%d", BASE_TOPIC, FERDUINO_DEVICE_ID, i);
+    }
 
     _lastReconnectMs = 0;
+    _lastStateMs = 0;
     _discoveryPublished = false;
   }
 
@@ -50,21 +55,25 @@ public:
     hal::network().loop();
     hal::mqtt().loop();
 
-    if (!hal::network().isInitialized())
+    if (!hal::network().isInitialized()) {
       return;
+    }
 
     if (!hal::mqtt().connected()) {
       const uint32_t now = millis();
-      if (now - _lastReconnectMs < 2000)
+      if (now - _lastReconnectMs < 2000) {
         return;
+      }
       _lastReconnectMs = now;
 
       if (hal::mqtt().connect() == hal::MqttError::Ok) {
         // Availability online retained
         publishAvailability(true);
 
-        // Subscribe comandos
-        (void)hal::mqtt().subscribe(_cmdOutlet1Topic);
+        // Subscribe comandos outlets 1..9
+        for (int i = 1; i <= 9; i++) {
+          (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
+        }
 
         // Discovery (una vez por arranque/conexión)
         if (!_discoveryPublished) {
@@ -72,13 +81,13 @@ public:
           _discoveryPublished = true;
         }
 
-        // Publica primer estado placeholder
+        // Publica estado inicial (placeholder coherente con HA discovery)
         publishStatePlaceholder();
       }
       return;
     }
 
-    // B1: refresco ligero de estado (placeholder) cada 5s para ver el flujo en logs
+    // Refresco ligero de estado cada 5s (placeholder) para observabilidad
     const uint32_t now = millis();
     if (now - _lastStateMs > 5000) {
       _lastStateMs = now;
@@ -91,8 +100,7 @@ public:
   }
 
   bool publishStatus(const char* key, const char* value, bool retained=false) override {
-    // B1: helper mínimo para publicar un estado JSON de 1 clave.
-    // En B2 haremos un state JSON coherente de todo el sistema.
+    // Helper mínimo: publica JSON de 1 clave. Se mantiene por compatibilidad con la interfaz.
     if (!key || !value) return false;
 
     char msg[180];
@@ -107,7 +115,6 @@ public:
   }
 
   void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
-    // B1: solo “outlet1”
     if (!topic || !payload || len == 0) return;
 
     // Copia payload a buffer
@@ -115,13 +122,16 @@ public:
     memcpy(_rx, payload, n);
     _rx[n] = '\0';
 
-    if (strcmp(topic, _cmdOutlet1Topic) == 0) {
-      // HA enviará "1" / "0". Sin placa, no actuamos: solo reflejamos en estado.
-      // Guardamos el “estado simulado”.
-      _outlet1 = (_rx[0] == '1') ? 1 : 0;
+    // Outlets 1..9
+    for (int i = 1; i <= 9; i++) {
+      if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
+        const uint8_t v = (_rx[0] == '1') ? 1 : 0;
+        app::ha::applyOutletCommand((uint8_t)i, v);
 
-      // Publica estado actualizado (placeholder)
-      publishStatePlaceholder();
+        // Publica estado actualizado coherente con HA discovery
+        publishStatePlaceholder();
+        return;
+      }
     }
   }
 
@@ -141,21 +151,74 @@ private:
   }
 
   void publishStatePlaceholder() {
-    // Placeholder compatible con discovery B1:
-    // - twater para sensor
-    // - outlet1 para switch
-    const float twater = 0.0f;
+    // Publica un state mínimo coherente con el discovery (B2.x):
+    // - water_temperature, heatsink_temperature, ambient_temperature (placeholder)
+    // - water_ph, reactor_ph, orp, salinity (placeholder)
+    // - led_*_power (placeholder)
+    // - outlet_1..outlet_9 (estado HA simulado)
+    // - uptime (segundos)
+    const float water_temperature    = 0.0f;
+    const float heatsink_temperature = 0.0f;
+    const float ambient_temperature  = 0.0f;
 
-    char msg[220];
-    // twater float -> imprime como double por variádicos
+    const float water_ph   = 0.0f;
+    const float reactor_ph = 0.0f;
+    const float orp        = 0.0f;
+    const float salinity   = 0.0f;
+
+    const int led_white = 0;
+    const int led_blue  = 0;
+    const int led_rb    = 0;
+    const int led_red   = 0;
+    const int led_uv    = 0;
+
+    char msg[640];
     snprintf(msg, sizeof(msg),
              "{"
-               "\"twater\":%.2f,"
-               "\"outlet1\":%d,"
-               "\"running\":%lu"
+               "\"water_temperature\":%.2f,"
+               "\"heatsink_temperature\":%.2f,"
+               "\"ambient_temperature\":%.2f,"
+               "\"water_ph\":%.2f,"
+               "\"reactor_ph\":%.2f,"
+               "\"orp\":%.2f,"
+               "\"salinity\":%.3f,"
+               "\"led_white_power\":%d,"
+               "\"led_blue_power\":%d,"
+               "\"led_royal_blue_power\":%d,"
+               "\"led_red_power\":%d,"
+               "\"led_uv_power\":%d,"
+               "\"outlet_1\":%d,"
+               "\"outlet_2\":%d,"
+               "\"outlet_3\":%d,"
+               "\"outlet_4\":%d,"
+               "\"outlet_5\":%d,"
+               "\"outlet_6\":%d,"
+               "\"outlet_7\":%d,"
+               "\"outlet_8\":%d,"
+               "\"outlet_9\":%d,"
+               "\"uptime\":%lu"
              "}",
-             (double)twater,
-             _outlet1,
+             (double)water_temperature,
+             (double)heatsink_temperature,
+             (double)ambient_temperature,
+             (double)water_ph,
+             (double)reactor_ph,
+             (double)orp,
+             (double)salinity,
+             led_white,
+             led_blue,
+             led_rb,
+             led_red,
+             led_uv,
+             (int)app::ha::getOutletState(1),
+             (int)app::ha::getOutletState(2),
+             (int)app::ha::getOutletState(3),
+             (int)app::ha::getOutletState(4),
+             (int)app::ha::getOutletState(5),
+             (int)app::ha::getOutletState(6),
+             (int)app::ha::getOutletState(7),
+             (int)app::ha::getOutletState(8),
+             (int)app::ha::getOutletState(9),
              (unsigned long)(millis() / 1000UL));
 
     (void)hal::mqtt().publish(_stateTopic, (const uint8_t*)msg, strlen(msg), false);
@@ -169,12 +232,11 @@ private:
 
   char _stateTopic[96] = {0};
   char _availTopic[96] = {0};
-  char _cmdOutlet1Topic[96] = {0};
+
+  // cmd topics outlets 1..9 (índice 1..9)
+  char _cmdOutletTopic[10][96] = {{0}};
 
   char _rx[32] = {0};
-
-  // estado simulado (sin placa)
-  int _outlet1 = 0;
 };
 
 ICommsBackend& comms_ha_singleton() {

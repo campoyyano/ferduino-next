@@ -1,5 +1,22 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] B2.3 – Control HA → Outlets (switch + cmd topics)
+
+- Se actualiza Home Assistant Discovery: outlets 1..9 pasan de `binary_sensor` (read-only) a `switch` (controlables).
+- Se definen topics de comando por outlet:
+  - `ferduino/<device_id>/cmd/outlet/<n>` con payload `"1"` / `"0"`.
+- Se implementa módulo de control de outlets (estado en RAM por ausencia de hardware):
+  - `ha_outlet_control.*` mantiene `outlet_1..outlet_9` y aplica comandos.
+  - Punto de integración preparado para mapear a HAL relés en fases posteriores.
+- El backend HA:
+  - se suscribe a `cmd/outlet/1..9`,
+  - aplica cambios de outlet,
+  - publica `ferduino/<device_id>/state` actualizado para reflejar el cambio inmediatamente.
+- El bridge Legacy → HA prioriza el estado de outlets desde HA (simulado) para que el `state` publicado sea coherente con los comandos recibidos.
+- Build verificado: **compila en mega2560_port**.
+
+Estado: **B2.3 COMPLETADO**
+
 ### [2026-02-06] B2.2 – Bridge Legacy → Home Assistant (state + discovery)
 
 - Se implementa el **bridge Legacy → HA**: a partir del JSON legacy del comando **ID0 (Home)** se genera un `state` HA derivado.

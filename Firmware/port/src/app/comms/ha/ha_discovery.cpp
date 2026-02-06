@@ -201,16 +201,59 @@ static void publishAllEntities() {
   // Uptime
   publishSensor("uptime", "Uptime", "uptime", "", "s", "{{ value_json.uptime }}");
 
-  // Outlets read-only (B2.2) como binary_sensor
-  publishBinarySensor("outlet_1", "Outlet 1", "outlet_1", "{{ 'ON' if value_json.outlet_1 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_2", "Outlet 2", "outlet_2", "{{ 'ON' if value_json.outlet_2 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_3", "Outlet 3", "outlet_3", "{{ 'ON' if value_json.outlet_3 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_4", "Outlet 4", "outlet_4", "{{ 'ON' if value_json.outlet_4 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_5", "Outlet 5", "outlet_5", "{{ 'ON' if value_json.outlet_5 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_6", "Outlet 6", "outlet_6", "{{ 'ON' if value_json.outlet_6 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_7", "Outlet 7", "outlet_7", "{{ 'ON' if value_json.outlet_7 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_8", "Outlet 8", "outlet_8", "{{ 'ON' if value_json.outlet_8 == 1 else 'OFF' }}");
-  publishBinarySensor("outlet_9", "Outlet 9", "outlet_9", "{{ 'ON' if value_json.outlet_9 == 1 else 'OFF' }}");
+    // Outlets como switch (B2.3)
+  // command_topic: ferduino/<id>/cmd/outlet/N (payload "1"/"0")
+  // state: value_json.outlet_N
+
+  for (int n = 1; n <= 9; n++) {
+    char objectId[16];
+    char name[20];
+    char uniq[16];
+    char topic[190];
+
+    snprintf(objectId, sizeof(objectId), "outlet_%d", n);
+    snprintf(name, sizeof(name), "Outlet %d", n);
+    snprintf(uniq, sizeof(uniq), "outlet_%d", n);
+
+    snprintf(topic, sizeof(topic),
+             "%s/switch/ferduino_%s/%s/config",
+             DISCOVERY_PREFIX, FERDUINO_DEVICE_ID, objectId);
+
+    char stateTopic[96], availTopic[96];
+    buildTopics(stateTopic, sizeof(stateTopic), availTopic, sizeof(availTopic));
+
+    char cmdTopic[96];
+    snprintf(cmdTopic, sizeof(cmdTopic), "%s/%s/cmd/outlet/%d", BASE_TOPIC, FERDUINO_DEVICE_ID, n);
+
+    char device[220];
+    buildDeviceJson(device, sizeof(device));
+
+    char payload[700];
+    snprintf(payload, sizeof(payload),
+             "{"
+               "\"name\":\"%s\","
+               "\"uniq_id\":\"ferduino_%s_%s\","
+               "\"stat_t\":\"%s\","
+               "\"cmd_t\":\"%s\","
+               "\"avty_t\":\"%s\","
+               "\"pl_avail\":\"online\","
+               "\"pl_not_avail\":\"offline\","
+               "\"pl_on\":\"1\","
+               "\"pl_off\":\"0\","
+               "\"val_tpl\":\"{{ value_json.%s }}\","
+               "\"dev\":%s"
+             "}",
+             name,
+             FERDUINO_DEVICE_ID, uniq,
+             stateTopic,
+             cmdTopic,
+             availTopic,
+             objectId,
+             device);
+
+    publishRetained(topic, payload);
+  }
+
 }
 
 void publishDiscoveryMinimal() {

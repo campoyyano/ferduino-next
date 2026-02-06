@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stddef.h>
-
 namespace app::ha {
 
 // Parsea JSON legacy (ID0 Home) y publica HA state derivado a:

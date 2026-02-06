@@ -1,5 +1,6 @@
 #include "app/comms/ha/ha_legacy_bridge.h"
 
+#include "app/comms/ha/ha_outlet_control.h"
 #include "hal/hal_mqtt.h"
 
 #include <Arduino.h>
@@ -13,7 +14,7 @@
 
 namespace app::ha {
 
-// Defaults (B2): constantes. En B3 se moverán a EEPROM/config runtime.
+// Defaults (B2/B3): constantes. En B3 se moverán a EEPROM/config runtime.
 static constexpr const char* BASE_TOPIC = "ferduino";
 
 static bool findValuePtr(const char* json, const char* key, const char** outPtr) {
@@ -42,7 +43,6 @@ static bool parseFloatKey(const char* json, const char* key, float& out) {
   const char* p = nullptr;
   if (!findValuePtr(json, key, &p)) return false;
 
-  // Manejo simple de valores numéricos. (Legacy usa números sin comillas.)
   out = (float)atof(p);
   return true;
 }
@@ -72,7 +72,6 @@ void bridgeFromLegacyHomeJson(const char* legacyJson) {
   float waterph=0, reactorph=0, orp=0, dens=0;
 
   int wLedW=0, bLedW=0, rbLedW=0, redLedW=0, uvLedW=0;
-  int outlet[10] = {0}; // 1..9
   int running=0;
 
   (void)parseFloatKey(legacyJson, "twater", twater);
@@ -92,7 +91,8 @@ void bridgeFromLegacyHomeJson(const char* legacyJson) {
 
   (void)parseIntKey(legacyJson, "running", running);
 
-  // outlets
+  // Outlets: leemos legacy (fallback) y luego preferimos el estado HA (B2.3)
+  int outlet[10] = {0}; // 1..9
   (void)parseIntKey(legacyJson, "outlet1", outlet[1]);
   (void)parseIntKey(legacyJson, "outlet2", outlet[2]);
   (void)parseIntKey(legacyJson, "outlet3", outlet[3]);
@@ -103,9 +103,13 @@ void bridgeFromLegacyHomeJson(const char* legacyJson) {
   (void)parseIntKey(legacyJson, "outlet8", outlet[8]);
   (void)parseIntKey(legacyJson, "outlet9", outlet[9]);
 
+  // Preferir HA state (simulado o real) sobre legacy para reflejar comandos HA
+  for (int i = 1; i <= 9; i++) {
+    outlet[i] = (int)app::ha::getOutletState((uint8_t)i);
+  }
+
   // Construir HA state JSON (snake_case)
-  // Nota: usaremos (double) para snprintf con %f (AVR).
-  char ha[560];
+  char ha[620];
   snprintf(ha, sizeof(ha),
            "{"
              "\"water_temperature\":%.2f,"
