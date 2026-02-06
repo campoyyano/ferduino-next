@@ -1,5 +1,28 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] B3.1 – Configuración runtime + EEPROM (base)
+
+- Se introduce módulo `app::cfg` para configuración persistente:
+  - Backend activo (LEGACY / HA)
+  - Configuración MQTT (host, port, device_id)
+  - Configuración de red (estructura preparada)
+- Configuración versionada con:
+  - magic (`FDNX`)
+  - version
+  - size
+  - crc32
+- Carga desde EEPROM con validación; fallback automático a defaults definidos por `build_flags`.
+- API pública:
+  - `loadOrDefault()`
+  - `save()`
+  - `factoryReset()`
+  - `get()`
+- Base preparada para eliminar `#if` de selección de backend en B3.2.
+- Build verificado: **compila en mega2560_port**.
+
+Estado: **B3.1 COMPLETADO**
+
+
 ### [2026-02-06] B2.3 – Control HA → Outlets (switch + cmd topics)
 
 - Se actualiza Home Assistant Discovery: outlets 1..9 pasan de `binary_sensor` (read-only) a `switch` (controlables).
