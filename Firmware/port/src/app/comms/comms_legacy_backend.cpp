@@ -1,5 +1,7 @@
 #include "app/comms_backend.h"
 #include "app/comms_mode.h"
+#include "app/comms/ha/ha_legacy_bridge.h"
+#include "app/config/app_config.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -16,18 +18,6 @@
 
 #ifndef FERDUINO_LEGACY_APIKEY
   #error "Define FERDUINO_LEGACY_APIKEY in platformio.ini build_flags"
-#endif
-
-#ifndef FERDUINO_DEVICE_ID
-  #error "Define FERDUINO_DEVICE_ID in platformio.ini build_flags"
-#endif
-
-#ifndef MQTT_BROKER_HOST
-  #error "Define MQTT_BROKER_HOST in platformio.ini build_flags"
-#endif
-
-#ifndef MQTT_BROKER_PORT
-  #error "Define MQTT_BROKER_PORT in platformio.ini build_flags"
 #endif
 
 namespace app {
@@ -55,10 +45,13 @@ static void publishJson(const char* pubTopic, const char* json, bool retained = 
 class CommsLegacyBackend final : public ICommsBackend {
 public:
   void begin() override {
+    // B3.2: MQTT host/port/clientId vienen de EEPROM (app::cfg)
+    const auto& appcfg = app::cfg::get();
+
     hal::MqttConfig cfg;
-    cfg.host = MQTT_BROKER_HOST;
-    cfg.port = (uint16_t)MQTT_BROKER_PORT;
-    cfg.clientId = FERDUINO_DEVICE_ID;
+    cfg.host = appcfg.mqtt.host;
+    cfg.port = appcfg.mqtt.port;
+    cfg.clientId = appcfg.mqtt.deviceId;
     cfg.keepAliveSec = 30;
 
     (void)hal::mqtt().begin(cfg);
@@ -277,6 +270,9 @@ private:
     );
 
     publishJson(_pubTopic, msg, false);
+
+    // Bridge Legacy -> HA (B2.2)
+    app::ha::bridgeFromLegacyHomeJson(msg);
   }
 
   // ========== ID 1 ==========

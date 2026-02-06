@@ -1,5 +1,6 @@
 #include "app/comms_backend.h"
 #include "app/comms_mode.h"
+#include "app/config/app_config.h"
 
 namespace app {
 
@@ -8,11 +9,14 @@ ICommsBackend& comms_legacy_singleton();
 ICommsBackend& comms_ha_singleton();
 
 ICommsBackend& comms() {
-#if (FERDUINO_COMMS_MODE == FERDUINO_COMMS_HA)
-  return comms_ha_singleton();
-#else
+  // B3.2: selección runtime (EEPROM).
+  // Importante: debes llamar a app::cfg::loadOrDefault() antes de comms().begin()
+  // para que host/port/deviceId no queden vacíos.
+  const auto& cfg = app::cfg::get();
+  if (cfg.backendMode == app::cfg::BACKEND_HA) {
+    return comms_ha_singleton();
+  }
   return comms_legacy_singleton();
-#endif
 }
 
 } // namespace app

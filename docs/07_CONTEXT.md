@@ -1,5 +1,20 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] B3.2 – Selector runtime de backend + MQTT desde EEPROM (sin setup global)
+
+- `app::comms()` deja de depender de `#if FERDUINO_COMMS_MODE` y selecciona backend en runtime usando:
+  - `app::cfg::get().backendMode` (LEGACY / HA).
+- Backend LEGACY:
+  - MQTT `host/port/deviceId` pasan a leerse desde `app::cfg::get().mqtt.*` (EEPROM o defaults).
+- Backend HA:
+  - MQTT `host/port/deviceId` pasan a leerse desde `app::cfg::get().mqtt.*`.
+  - `begin()` fuerza `app::cfg::loadOrDefault()` para no depender todavía de un `setup()` central (port aún sin entrypoint).
+- Compilación verificada: **compila en mega2560_port**.
+
+Nota: `ha_discovery` aún usa macros de deviceId; se migrará a runtime en el siguiente micro-paso.
+Estado: **B3.2 COMPLETADO**
+
+
 ### [2026-02-06] B3.1 – Configuración runtime + EEPROM (base)
 
 - Se introduce módulo `app::cfg` para configuración persistente:

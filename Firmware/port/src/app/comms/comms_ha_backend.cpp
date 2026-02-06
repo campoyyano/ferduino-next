@@ -1,4 +1,5 @@
 #include "app/comms/comms_ha_backend.h"
+#include "app/config/app_config.h"
 #include "app/comms/ha/ha_outlet_control.h"
 #include "app/comms/ha/ha_discovery.h"
 
@@ -9,18 +10,6 @@
 #include <string.h>
 #include <stdio.h>
 
-#ifndef MQTT_BROKER_HOST
-  #error "MQTT_BROKER_HOST must be defined in platformio.ini build_flags"
-#endif
-
-#ifndef MQTT_BROKER_PORT
-  #error "MQTT_BROKER_PORT must be defined in platformio.ini build_flags"
-#endif
-
-#ifndef FERDUINO_DEVICE_ID
-  #error "FERDUINO_DEVICE_ID must be defined in platformio.ini build_flags"
-#endif
-
 namespace app {
 
 static constexpr const char* BASE_TOPIC = "ferduino";
@@ -28,22 +17,29 @@ static constexpr const char* BASE_TOPIC = "ferduino";
 class CommsHABackend final : public ICommsBackend {
 public:
   void begin() override {
-    hal::MqttConfig cfg;
-    cfg.host = MQTT_BROKER_HOST;
-    cfg.port = (uint16_t)MQTT_BROKER_PORT;
-    cfg.clientId = FERDUINO_DEVICE_ID;
-    cfg.keepAliveSec = 30;
+    // B3.2: no dependemos de setup() todavía.
+    // Aseguramos que la config está cargada (EEPROM o defaults de build_flags).
+    (void)app::cfg::loadOrDefault();
 
-    (void)hal::mqtt().begin(cfg);
+    const auto& cfg = app::cfg::get();
+    const char* deviceId = cfg.mqtt.deviceId;
+
+    hal::MqttConfig mcfg;
+    mcfg.host = cfg.mqtt.host;
+    mcfg.port = cfg.mqtt.port;
+    mcfg.clientId = deviceId;
+    mcfg.keepAliveSec = 30;
+
+    (void)hal::mqtt().begin(mcfg);
     hal::mqtt().onMessage(&CommsHABackend::onMqttMessageStatic);
 
-    snprintf(_stateTopic, sizeof(_stateTopic), "%s/%s/state", BASE_TOPIC, FERDUINO_DEVICE_ID);
-    snprintf(_availTopic, sizeof(_availTopic), "%s/%s/availability", BASE_TOPIC, FERDUINO_DEVICE_ID);
+    snprintf(_stateTopic, sizeof(_stateTopic), "%s/%s/state", BASE_TOPIC, deviceId);
+    snprintf(_availTopic, sizeof(_availTopic), "%s/%s/availability", BASE_TOPIC, deviceId);
 
     // Suscripciones de comandos: outlets 1..9 (B2.3)
     for (int i = 1; i <= 9; i++) {
       snprintf(_cmdOutletTopic[i], sizeof(_cmdOutletTopic[i]),
-               "%s/%s/cmd/outlet/%d", BASE_TOPIC, FERDUINO_DEVICE_ID, i);
+               "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
     }
 
     _lastReconnectMs = 0;
@@ -76,6 +72,8 @@ public:
         }
 
         // Discovery (una vez por arranque/conexión)
+        // NOTA: ha_discovery.cpp actualmente usa FERDUINO_DEVICE_ID por macro.
+        // En B3.3/B4 lo haremos runtime también (pasando deviceId o leyendo cfg dentro).
         if (!_discoveryPublished) {
           app::ha::publishDiscoveryMinimal();
           _discoveryPublished = true;
