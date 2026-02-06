@@ -26,28 +26,39 @@ void loop() {
   digitalWrite(alarmPin, LOW);
   delay(800);
 
+
+#if (SMOKETEST == SMOKETEST_GPIO)
   // A2: test mínimo (LED D13)
-  // app_gpio_smoketest_run();
+  app_gpio_smoketest_run();
 
+#elif (SMOKETEST == SMOKETEST_FERDUINO_PINS)
   // A3: test con pines reales Ferduino
-  // app_ferduino_pins_smoketest_run();
+  app_ferduino_pins_smoketest_run();
 
+#elif (SMOKETEST == SMOKETEST_PWM)
   // A4: test con pwm pines reales arduino
-  // app_pwm_leds_smoketest_run(); 
+  app_pwm_leds_smoketest_run();
 
+#elif (SMOKETEST == SMOKETEST_IOX)
   //A5: Test del PCF8575
-  // app_pcf8575_smoketest_run();
-    app_ioexpander_smoketest_run();
+  app_ioexpander_smoketest_run();
 
-  // A6: Test Uart/Debug
-    app_serial_smoketest_run();
+#elif (SMOKETEST == SMOKETEST_RTC)
+   // A7: Test RTC
+  app_rtc_smoketest_run();
 
-  // A7: Test RTC
-    app_rtc_smoketest_run();
-
+#elif (SMOKETEST == SMOKETEST_RELAY)
   // A8: PCF8575 Test_2;
-    app_relay_smoketest_run();
+  app_relay_smoketest_run();
 
+#elif (SMOKETEST == SMOKETEST_SERIAL)
+  // A6: Test Uart/Debug
+  app_serial_smoketest_run();
 
+#else
+  #error "SMOKETEST invalido. Revisa smoketest_select.h"
+#endif
 
 }
+
+
