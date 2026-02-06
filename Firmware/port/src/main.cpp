@@ -45,5 +45,9 @@ void loop() {
   // A7: Test RTC
     app_rtc_smoketest_run();
 
+  // A8: PCF8575 Test_2;
+    app_relay_smoketest_run();
+
+
 
 }
