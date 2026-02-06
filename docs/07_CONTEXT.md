@@ -1,6 +1,13 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
 
+### [2026-02-06] A9.3.1 – Definición de la HAL MQTT
+
+- Se añade `Firmware/port/include/hal/hal_mqtt.h` con la interfaz pública `IMqttHal`.
+- Se mantiene el desacoplo: el header no incluye librerías concretas (p. ej. `PubSubClient.h`).
+- Se seguirá el patrón de acceso mediante `hal::mqtt()` (service locator) para evitar heap y simplificar integración.
+
+
 ### [2026-02-06] A9.2 – Implementación Ethernet (W5x00) + smoketest
 
 - Se implementa `INetworkHal` para Mega2560 usando la librería `Ethernet` (W5x00) en `src/hal/impl/mega2560/`.
