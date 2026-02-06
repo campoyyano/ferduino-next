@@ -1,5 +1,49 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+#include "app/comms_backend.h"
+#include "app/comms_mode.h"
+
+namespace app {
+
+// Factories (singletons) de backends
+ICommsBackend& comms_legacy_singleton();
+ICommsBackend& comms_ha_singleton();
+
+class CommsFacade final {
+public:
+  void begin() {
+    backend().begin();
+  }
+
+  void loop() {
+    backend().loop();
+  }
+
+  bool connected() const {
+    return backend().connected();
+  }
+
+  bool publishStatus(const char* key, const char* value, bool retained=false) {
+    return backend().publishStatus(key, value, retained);
+  }
+
+private:
+  static ICommsBackend& backend() {
+#if (FERDUINO_COMMS_MODE == FERDUINO_COMMS_HA)
+    return comms_ha_singleton();
+#else
+    return comms_legacy_singleton();
+#endif
+  }
+};
+
+static CommsFacade g_comms;
+
+CommsFacade& comms() {
+  return g_comms;
+}
+
+} // namespace app
 
 
 ### [2026-02-06] A10 – Backend de comunicaciones Legacy (MQTT)
