@@ -1,49 +1,28 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
-#include "app/comms_backend.h"
-#include "app/comms_mode.h"
+### [2026-02-06] B2.2 – Bridge Legacy → Home Assistant (state + discovery)
 
-namespace app {
+- Se implementa el **bridge Legacy → HA**: a partir del JSON legacy del comando **ID0 (Home)** se genera un `state` HA derivado.
+- Parseo AVR-friendly (sin parser JSON):
+  - extracción por clave con `strstr` + `atof/atoi`
+  - defaults a 0 si falta algún campo
+  - no bloquea el loop ante JSON parcial/truncado
+- Publicación del estado HA en:
+  - `ferduino/<device_id>/state`
+  con claves “HA-friendly” (snake_case):
+  - `water_temperature`, `heatsink_temperature`, `ambient_temperature`
+  - `water_ph`, `reactor_ph`, `orp`, `salinity`
+  - `led_*_power`
+  - `outlet_1..outlet_9`
+  - `uptime`
+- Hook del bridge integrado en `publishHome_ID0()` del backend legacy: cada publicación legacy ID0 genera también `state` HA.
+- Se amplía **Home Assistant Discovery** para exponer entidades (retained):
+  - Sensores de temperatura, química, LEDs y uptime.
+  - Outlets 1..9 como `binary_sensor` (read-only) en esta fase.
+- Se añade documentación de parseo y mapeo en:
+  - `docs/ha_legacy_bridge_parsing.md`
 
-// Factories (singletons) de backends
-ICommsBackend& comms_legacy_singleton();
-ICommsBackend& comms_ha_singleton();
-
-class CommsFacade final {
-public:
-  void begin() {
-    backend().begin();
-  }
-
-  void loop() {
-    backend().loop();
-  }
-
-  bool connected() const {
-    return backend().connected();
-  }
-
-  bool publishStatus(const char* key, const char* value, bool retained=false) {
-    return backend().publishStatus(key, value, retained);
-  }
-
-private:
-  static ICommsBackend& backend() {
-#if (FERDUINO_COMMS_MODE == FERDUINO_COMMS_HA)
-    return comms_ha_singleton();
-#else
-    return comms_legacy_singleton();
-#endif
-  }
-};
-
-static CommsFacade g_comms;
-
-CommsFacade& comms() {
-  return g_comms;
-}
-
-} // namespace app
+Estado: **B2.2 COMPLETADO**
 
 
 ### [2026-02-06] A10 – Backend de comunicaciones Legacy (MQTT)

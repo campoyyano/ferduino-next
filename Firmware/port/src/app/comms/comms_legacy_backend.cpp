@@ -1,5 +1,6 @@
 #include "app/comms_backend.h"
 #include "app/comms_mode.h"
+#include "app/comms/ha/ha_legacy_bridge.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -277,6 +278,9 @@ private:
     );
 
     publishJson(_pubTopic, msg, false);
+        // Bridge Legacy -> HA (B2.2)
+    app::ha::bridgeFromLegacyHomeJson(msg);
+
   }
 
   // ========== ID 1 ==========

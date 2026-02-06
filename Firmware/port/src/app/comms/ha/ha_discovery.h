@@ -1,15 +1,12 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
 namespace app::ha {
 
-// Publica discovery mínimo (sensor + switch) para Home Assistant.
+// Publica discovery mínimo (en B2.2: publicamos todo lo que tenemos).
 // Llamar después de conectar MQTT.
 void publishDiscoveryMinimal();
 
-// Permite re-publicar en el futuro si HA reinicia (opcional).
+// Publica discovery completo (alias de minimal por ahora).
 void publishDiscoveryAll();
 
 } // namespace app::ha
