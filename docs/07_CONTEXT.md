@@ -1,5 +1,13 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] A9.1 – Definición de la HAL de red
+
+- Se introduce la interfaz pública `hal_network.h`.
+- Se define el contrato de la HAL de red (Ethernet / futuros transports).
+- No se incluyen dependencias de plataforma (`Ethernet.h`, etc.).
+- La implementación se realizará en `src/hal/impl/<plataforma>/`.
+
+
 ## Estado actual del port (Firmware/port)
 
 - El port es un proyecto PlatformIO limpio, desacoplado del firmware original de Ferduino.
