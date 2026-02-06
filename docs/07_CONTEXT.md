@@ -2,6 +2,20 @@
 
 
 
+### [2026-02-06] A10 – Backend de comunicaciones Legacy (MQTT)
+
+- Se implementa completamente el backend de comunicaciones **Legacy MQTT** compatible con Ferduino original.
+- Selector de backend activo vía `FERDUINO_COMMS_MODE` (PlatformIO build_flags).
+- Implementados todos los comandos legacy **ID 0..17**:
+  - Parsing CSV con terminador `K`.
+  - Distinción `mode == 0` (lectura) / `mode != 0` (escritura).
+  - Respuestas JSON con **claves originales** del protocolo Ferduino.
+  - Escrituras responden `{"response":"ok"}` según comportamiento legacy.
+- Backend desacoplado mediante interfaz `ICommsBackend`.
+- Integración con HAL MQTT (`PubSubClient`) y HAL Network.
+- Código compila **sin warnings** en AVR (Mega2560).
+- Sin dependencia de hardware real (va
+
 ### [2026-02-06] A10.1 – Selección de backend de comunicaciones (legacy vs HA)
 
 - Se introduce selección de backend de comunicaciones por compilación mediante `FERDUINO_COMMS_MODE`.
