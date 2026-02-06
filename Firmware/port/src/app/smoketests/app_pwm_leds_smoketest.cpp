@@ -1,9 +1,9 @@
 #include <Arduino.h>
 
-#include "hal_gpio.h"
-#include "hal_time.h"
-#include "hal_pwm.h"
-#include "pins.h"
+#include "hal/hal_gpio.h"
+#include "hal/hal_time.h"
+#include "hal/hal_pwm.h"
+#include "pins/pins.h"
 
 static void configurarPwmLeds() {
   hal::modoPin(pins::ledPinUV,      hal::PinMode::Salida);

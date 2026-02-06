@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <RTClib.h>
-#include "hal_rtc.h"
+#include "hal/hal_rtc.h"
 
 namespace hal {
 

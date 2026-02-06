@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "hal_serial.h"
+#include "hal/hal_serial.h"
 
 namespace hal {
 

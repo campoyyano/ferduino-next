@@ -1,0 +1,83 @@
+# Ferduino-next – Firmware PORT – Contexto del Proyecto
+
+## Objetivo general
+Portar el firmware original del Ferduino (Arduino Mega 2560) a una arquitectura
+moderna basada en HAL, manteniendo compatibilidad con el hardware original
+antes de migrar a otras plataformas (Giga, ESP, etc).
+
+La prioridad actual es:
+1. Que compile
+2. Que funcione en el hardware original
+3. Que la abstracción HAL sea limpia y extensible
+
+---
+
+## Hardware actual objetivo
+- Board principal: **Arduino Mega 2560**
+- IO Expander: **PCF8575**
+- RTC original: **DS1307**
+- RTC alternativo soportado: **DS3231**
+- LEDs PWM directos desde el Mega
+- Relés controlados vía PCF8575
+
+---
+
+## Decisiones de diseño importantes
+
+### HAL
+- Todo acceso a hardware pasa por HAL
+- No se accede directamente a Wire / digitalWrite / pinMode desde la app
+- HAL es C++ ligero, sin dependencias innecesarias
+
+### IO Expander
+- Se usa un HAL genérico (`IoExpander`) con:
+  - Dirección configurable
+  - Soporte ACTIVE_LOW
+  - Shadow register interno
+- Implementación basada en I2C puro (no dependencia directa de librerías externas)
+
+### RTC
+- HAL RTC soporta **DS1307 y DS3231**
+- API unificada (`FechaHora`)
+- Selección por disponibilidad en runtime
+- RTC ya compilando correctamente
+
+---
+
+## Estado actual (cerrado)
+
+### HAL completados
+- hal_gpio
+- hal_time
+- hal_i2c
+- hal_pwm
+- hal_ioexpander (PCF8575)
+- hal_rtc (DS1307 + DS3231)
+
+### Smoke tests existentes y compilando
+- app_gpio_smoketest
+- app_ferduino_pins_smoketest
+- app_ioexpander_smoketest
+- app_pwm_leds_smoketest
+- app_rtc_smoketest
+
+---
+
+## Pendiente / siguientes pasos
+
+### HAL pendientes
+- hal_relay (encima de IoExpander)
+- hal_network (Ethernet / MQTT) – NO prioritario aún
+
+### A corto plazo
+1. Implementar `hal_relay`
+2. Smoke test de relés
+3. Validar en hardware real (Mega original)
+4. Limpieza final de includes y dependencias
+
+---
+
+## Notas importantes
+- El repositorio es la fuente de verdad
+- No se deben subir ZIPs ni `.pio`
+- Archivos grandes NUNCA al repo (GitHub limit)

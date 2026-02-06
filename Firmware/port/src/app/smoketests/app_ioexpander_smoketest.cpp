@@ -1,10 +1,10 @@
 #include <Arduino.h>
 
-#include "hal_time.h"
-#include "hal_ioexpander.h"
-#include "hal_serial.h"
-#include "board_debug.h"
-#include "board_hw_config.h"
+#include "hal/hal_time.h"
+#include "hal/hal_ioexpander.h"
+#include "hal/hal_serial.h"
+#include "board/board_debug.h"
+#include "board/board_hw_config.h"
 
 static hal::IoExpander iox(FERDUINO_PCF8575_ADDR);
 

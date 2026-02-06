@@ -1,10 +1,10 @@
 #include <Arduino.h>
 
-#include "pins_profiles.h"
-#include "hal_gpio.h"
-#include "hal_time.h"
-#include "hal_log.h"
-#include "app_smoketests.h"
+#include "pins/pins_profiles.h"
+#include "hal/hal_gpio.h"
+#include "hal/hal_time.h"
+#include "hal/hal_log.h"
+#include "app/app_smoketests.h"
 
 
 void setup() {

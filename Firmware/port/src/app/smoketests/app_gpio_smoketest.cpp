@@ -1,8 +1,8 @@
 #include <Arduino.h>
 //#include "ferduino_original_config.h" // pines originales
-#include "hal_gpio.h"
-#include "hal_time.h"
-#include "pins.h"
+#include "hal/hal_gpio.h"
+#include "hal/hal_time.h"
+#include "pins/pins.h"
 
 // Objetivo:
 // - Probar que podemos usar los pines del firmware original

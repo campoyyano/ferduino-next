@@ -1,8 +1,8 @@
 #include <Arduino.h>
-#include "hal_time.h"
-#include "hal_rtc.h"
-#include "hal_serial.h"
-#include "board_debug.h"
+#include "hal/hal_time.h"
+#include "hal/hal_rtc.h"
+#include "hal/hal_serial.h"
+#include "board/board_debug.h"
 
 static void imprimir2(uint8_t v) {
   if (v < 10) hal::serialEscribir(board::debugUart, "0");

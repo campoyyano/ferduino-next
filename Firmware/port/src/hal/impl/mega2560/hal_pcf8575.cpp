@@ -1,6 +1,6 @@
-#include "hal_pcf8575.h"
-#include "hal_i2c.h"
-#include "board_hw_config.h"
+#include "hal/hal_pcf8575.h"
+#include "hal/hal_i2c.h"
+#include "board/board_hw_config.h"
 
 namespace hal {
 

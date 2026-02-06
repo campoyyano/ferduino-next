@@ -1,7 +1,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include "hal_i2c.h"
+#include "hal/hal_i2c.h"
 
 namespace hal {
 

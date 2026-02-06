@@ -1,8 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-#include "pins_ferduino_mega2560.h"
-#include "pins_profiles.h"
+#include "pins/pins_ferduino_mega2560.h"
+#include "pins/pins_profiles.h"
 
 // Fachada: aquí exponemos SIEMPRE los mismos nombres (pins::X)
 // Unifica: base + overrides del perfil

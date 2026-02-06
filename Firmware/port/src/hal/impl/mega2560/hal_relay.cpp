@@ -1,7 +1,7 @@
-#include "hal_relay.h"
+#include "hal/hal_relay.h"
 
-#include "hal_ioexpander.h"
-#include "board_hw_config.h"
+#include "hal/hal_ioexpander.h"
+#include "board/board_hw_config.h"
 
 namespace hal {
 

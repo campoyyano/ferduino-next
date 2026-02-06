@@ -1,6 +1,6 @@
-#include "hal_ioexpander.h"
-#include "hal_i2c.h"
-#include "board_hw_config.h"
+#include "hal/hal_ioexpander.h"
+#include "hal/hal_i2c.h"
+#include "board/board_hw_config.h"
 
 namespace hal {
 

@@ -1,8 +1,8 @@
 #include <Arduino.h>
 
-#include "hal_gpio.h"
-#include "hal_time.h"
-#include "pins.h"
+#include "hal/hal_gpio.h"
+#include "hal/hal_time.h"
+#include "pins/pins.h"
 
 // Smoketest A3:
 // - Usa pines REALES del Ferduino (pero a través de pins.h del PORT)

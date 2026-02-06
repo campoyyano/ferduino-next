@@ -1,6 +1,6 @@
 #pragma once
 
-#include "board_config.h"
+#include "board/board_config.h"
 
 namespace hal {
 

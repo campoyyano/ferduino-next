@@ -1,9 +1,9 @@
 #include <Arduino.h>
 
-#include "hal_time.h"
-#include "hal_pcf8575.h"
-#include "board_hw_config.h"
-#include "pins.h"
+#include "hal/hal_time.h"
+#include "hal/hal_pcf8575.h"
+#include "board/board_hw_config.h"
+#include "pins/pins.h"
 
 // Smoketest A5:
 // - Inicializa PCF8575
