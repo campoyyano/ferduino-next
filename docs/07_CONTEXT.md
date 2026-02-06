@@ -1,5 +1,21 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+
+
+### [2026-02-06] A10.1 – Selección de backend de comunicaciones (legacy vs HA)
+
+- Se introduce selección de backend de comunicaciones por compilación mediante `FERDUINO_COMMS_MODE`.
+- Se define la interfaz `ICommsBackend` y la factoría `app::comms()` para desacoplar la app del protocolo.
+- Se preparan backends `legacy` y `HA` como stubs.
+- En una fase posterior, el modo se persistirá en EEPROM para permitir configuración en runtime.
+
+### [2026-02-06] A10.1 – Selección de backend de comunicaciones (legacy vs HA)
+
+- Se define `CommsMode` y selección por compilación mediante `FERDUINO_COMMS_MODE` (PlatformIO `build_flags`).
+- Se introduce la interfaz `ICommsBackend` y la factoría `app::comms()` para desacoplar la app del protocolo (legacy/HA).
+- En una fase posterior, este modo se persistirá en EEPROM para ser configurable sin recompilar.
+
+
 ### [2026-02-06] A9.3.2 – Implementación MQTT (PubSubClient) + smoketest
 
 - Implementación de `IMqttHal` para Mega2560 usando `PubSubClient` en `src/hal/impl/mega2560/`.
