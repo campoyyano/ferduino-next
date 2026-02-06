@@ -3,49 +3,31 @@
 
 namespace app {
 
-// Stubs (A10.1): compilan pero no hacen nada.
-// En A10.2/A10.3 se implementan de verdad.
+// Esta función la implementa el backend legacy real
+ICommsBackend& comms_legacy_singleton();
 
-class CommsLegacyBackend final : public ICommsBackend {
-public:
-  void begin() override {}
-  void loop() override {}
-  bool connected() const override { return false; }
-
-  bool publishStatus(const char* key, const char* value, bool retained=false) override {
-    (void)key; (void)value; (void)retained;
-    return false;
-  }
-
-  void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
-    (void)topic; (void)payload; (void)len;
-  }
-};
-
+// Backend HA (stub por ahora)
 class CommsHABackend final : public ICommsBackend {
 public:
   void begin() override {}
   void loop() override {}
   bool connected() const override { return false; }
 
-  bool publishStatus(const char* key, const char* value, bool retained=false) override {
-    (void)key; (void)value; (void)retained;
+  bool publishStatus(const char*, const char*, bool=false) override {
     return false;
   }
 
-  void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
-    (void)topic; (void)payload; (void)len;
-  }
+  void onMqttMessage(const char*, const uint8_t*, size_t) override {}
 };
 
-static CommsLegacyBackend g_legacy;
-static CommsHABackend     g_ha;
+static CommsHABackend g_ha;
 
+// Selector de backend (compile-time)
 ICommsBackend& comms() {
 #if (FERDUINO_COMMS_MODE == FERDUINO_COMMS_HA)
   return g_ha;
 #else
-  return g_legacy;
+  return comms_legacy_singleton();
 #endif
 }
 

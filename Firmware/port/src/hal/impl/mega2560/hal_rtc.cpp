@@ -29,7 +29,7 @@ namespace hal {
   // Heurística para distinguir DS3231 de DS1307 cuando RTC_CHIP=AUTO
   // DS3231 tiene temperatura en 0x11/0x12; el LSB (0x12) usa solo bits 7..6 (cuartos de grado)
   // => en DS3231: (reg0x12 & 0x3F) == 0 siempre.
-  static bool pareceDS3231() {
+  static bool __attribute__((unused)) pareceDS3231() {
     const uint8_t addr = 0x68;
 
     Wire.beginTransmission(addr);
