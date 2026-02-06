@@ -35,13 +35,13 @@ public:
     _client.stop();
   }
 
-  bool connected() const override {
-    return _client.connected();
-  }
+ bool connected() const override {
+  return const_cast<EthernetClient&>(_client).connected();
+}
 
-  int available() const override {
-    return _client.available();
-  }
+int available() const override {
+  return const_cast<EthernetClient&>(_client).available();
+}
 
   int read() override {
     return _client.read();

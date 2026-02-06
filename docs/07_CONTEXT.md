@@ -1,5 +1,12 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] A9.3.2 – Implementación MQTT (PubSubClient) + smoketest
+
+- Implementación de `IMqttHal` para Mega2560 usando `PubSubClient` en `src/hal/impl/mega2560/`.
+- MQTT se apoya en `hal::network().tcp()` mediante un wrapper mínimo compatible con `Client`.
+- Se añade `app_mqtt_smoketest` para validar conexión al broker, publish y recepción de mensajes.
+- `PubSubClient.h` y dependencias quedan limitadas a la implementación de plataforma.
+
 
 ### [2026-02-06] A9.3.1 – Definición de la HAL MQTT
 

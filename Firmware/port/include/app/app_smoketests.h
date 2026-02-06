@@ -9,3 +9,4 @@ void app_serial_smoketest_run();
 void app_rtc_smoketest_run();
 void app_relay_smoketest_run();
 void app_network_smoketest();
+void app_mqtt_smoketest();
