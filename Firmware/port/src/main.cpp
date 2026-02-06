@@ -55,6 +55,9 @@ void loop() {
   // A6: Test Uart/Debug
   app_serial_smoketest_run();
 
+  #elif (SMOKETEST == SMOKETEST_NETWORK)
+  //A9: Test Network
+  app_network_smoketest();
 #else
   #error "SMOKETEST invalido. Revisa smoketest_select.h"
 #endif

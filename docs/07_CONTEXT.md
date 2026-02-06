@@ -1,5 +1,13 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+
+### [2026-02-06] A9.2 – Implementación Ethernet (W5x00) + smoketest
+
+- Se implementa `INetworkHal` para Mega2560 usando la librería `Ethernet` (W5x00) en `src/hal/impl/mega2560/`.
+- Se añade `app_network_smoketest` para validar DHCP e impresión de IP (IP/GW/MASK/DNS).
+- Regla mantenida: `Ethernet.h` solo aparece en la implementación específica de plataforma.
+
+
 ### [2026-02-06] A9.1 – Definición de la HAL de red
 
 - Se introduce la interfaz pública `hal_network.h`.

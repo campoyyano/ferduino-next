@@ -14,7 +14,8 @@ struct Ip4 {
 
   constexpr Ip4() : a(0), b(0), c(0), d(0) {}
   constexpr Ip4(uint8_t a_, uint8_t b_, uint8_t c_, uint8_t d_)
-  : a(a_), b(b_), c(c_), d(d_) {}
+    : a(a_), b(b_), c(c_), d(d_) {}
+};
 
 struct NetworkConfig {
   // MAC obligatoria (en Mega con W5x00 es lo normal). Si no se quiere configurar aún,
@@ -91,5 +92,8 @@ public:
   // Decisión: devolvemos referencia para evitar alloc dinámica en AVR.
   virtual ITcpClient& tcp() = 0;
 };
+
+// Service locator (instancia de red para la plataforma actual)
+INetworkHal& network();
 
 } // namespace hal
