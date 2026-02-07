@@ -46,7 +46,9 @@ bool loadOrDefault();                // carga EEPROM o defaults (build_flags)
 bool save();                         // escribe EEPROM (con CRC)
 void factoryReset();                 // borra y vuelve a defaults en RAM
 
-// Utilidades
+// NUEVO B3.4: aplicar config en RAM (sin guardar aún)
+void set(const AppConfig& cfg);
+
 void applyDefaults(AppConfig& cfg);  // rellena con build_flags
 uint32_t computeCrc32(const void* data, size_t len);
 

@@ -1,5 +1,23 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### [2026-02-06] B3.4 – Administración de configuración por MQTT (GET/SET + persistencia)
+
+- Se añade un canal de administración de configuración por MQTT:
+  - Comando: `ferduino/<deviceId>/cmd/config`
+  - Estado (retained): `ferduino/<deviceId>/cfg`
+  - ACK: `ferduino/<deviceId>/cfg/ack`
+- Payloads soportados:
+  - `get` -> publica JSON con config actual.
+  - JSON parcial -> aplica cambios y persiste en EEPROM (`cfg::save()`), responde con `reboot_required` cuando procede.
+- Se añade `app::cfg::set(const AppConfig&)` para aplicar configuración en RAM antes de guardar.
+- Integración:
+  - `comms_ha_backend.cpp` y `comms_legacy_backend.cpp` se suscriben a `.../cmd/config` y delegan el parsing a `cfgadmin`.
+  - El handler de cfgadmin se evalúa antes que el resto de comandos.
+- Compilación verificada: **compila en mega2560_port**.
+
+Estado: **B3.4 COMPLETADO**
+
+
 ### [2026-02-06] B3.3 – HA Discovery runtime (deviceId desde EEPROM)
 
 - `ha_discovery` deja de depender de macros (`FERDUINO_DEVICE_ID`) y usa `app::cfg::get().mqtt.deviceId`.

@@ -16,14 +16,10 @@
 #endif
 
 #ifndef FERDUINO_COMMS_MODE
-  // si no viene por build_flags, asumimos legacy
   #define FERDUINO_COMMS_MODE FERDUINO_COMMS_LEGACY
 #endif
 
-// Magic "FDNX"
-static constexpr uint32_t CFG_MAGIC = 0x584E4446UL; // 'F''D''N''X' en little-endian
-
-// EEPROM layout (simple, fijo)
+static constexpr uint32_t CFG_MAGIC = 0x584E4446UL; // 'F''D''N''X' little-endian
 static constexpr int EEPROM_ADDR = 0;
 
 namespace app::cfg {
@@ -42,9 +38,7 @@ static uint32_t crc32_update(uint32_t crc, uint8_t data) {
 uint32_t computeCrc32(const void* data, size_t len) {
   const uint8_t* p = (const uint8_t*)data;
   uint32_t crc = 0xFFFFFFFFUL;
-  for (size_t i = 0; i < len; i++) {
-    crc = crc32_update(crc, p[i]);
-  }
+  for (size_t i = 0; i < len; i++) crc = crc32_update(crc, p[i]);
   return ~crc;
 }
 
@@ -55,15 +49,12 @@ void applyDefaults(AppConfig& c) {
   c.size = (uint16_t)sizeof(AppConfig);
   c.crc32 = 0;
 
-  // Backend default (A/B)
 #if (FERDUINO_COMMS_MODE == FERDUINO_COMMS_HA)
   c.backendMode = BACKEND_HA;
 #else
   c.backendMode = BACKEND_LEGACY;
 #endif
 
-  // Network defaults
-  // MAC por defecto: 02:FD:00:00:00:01 (local admin)
   c.net.mac[0] = 0x02;
   c.net.mac[1] = 0xFD;
   c.net.mac[2] = 0x00;
@@ -77,7 +68,6 @@ void applyDefaults(AppConfig& c) {
   c.net.subnet  = {255,255,255,0};
   c.net.dns     = {0,0,0,0};
 
-  // MQTT defaults desde build_flags
   strncpy(c.mqtt.host, MQTT_BROKER_HOST, sizeof(c.mqtt.host) - 1);
   c.mqtt.host[sizeof(c.mqtt.host) - 1] = '\0';
   c.mqtt.port = (uint16_t)MQTT_BROKER_PORT;
@@ -86,8 +76,10 @@ void applyDefaults(AppConfig& c) {
   c.mqtt.deviceId[sizeof(c.mqtt.deviceId) - 1] = '\0';
 }
 
-const AppConfig& get() {
-  return g_cfg;
+const AppConfig& get() { return g_cfg; }
+
+void set(const AppConfig& cfg) {
+  g_cfg = cfg;
 }
 
 static bool isValid(const AppConfig& c) {

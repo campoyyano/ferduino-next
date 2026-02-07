@@ -1,5 +1,8 @@
 #include "app/comms/comms_ha_backend.h"
+
 #include "app/config/app_config.h"
+#include "app/config/app_config_mqtt_admin.h"
+
 #include "app/comms/ha/ha_outlet_control.h"
 #include "app/comms/ha/ha_discovery.h"
 
@@ -17,8 +20,7 @@ static constexpr const char* BASE_TOPIC = "ferduino";
 class CommsHABackend final : public ICommsBackend {
 public:
   void begin() override {
-    // B3.2: no dependemos de setup() todavía.
-    // Aseguramos que la config está cargada (EEPROM o defaults de build_flags).
+    // No hay setup() global todavía -> garantizamos cfg en RAM
     (void)app::cfg::loadOrDefault();
 
     const auto& cfg = app::cfg::get();
@@ -36,11 +38,13 @@ public:
     snprintf(_stateTopic, sizeof(_stateTopic), "%s/%s/state", BASE_TOPIC, deviceId);
     snprintf(_availTopic, sizeof(_availTopic), "%s/%s/availability", BASE_TOPIC, deviceId);
 
-    // Suscripciones de comandos: outlets 1..9 (B2.3)
     for (int i = 1; i <= 9; i++) {
       snprintf(_cmdOutletTopic[i], sizeof(_cmdOutletTopic[i]),
                "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
     }
+
+    snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic),
+             "%s/%s/cmd/config", BASE_TOPIC, deviceId);
 
     _lastReconnectMs = 0;
     _lastStateMs = 0;
@@ -63,7 +67,6 @@ public:
       _lastReconnectMs = now;
 
       if (hal::mqtt().connect() == hal::MqttError::Ok) {
-        // Availability online retained
         publishAvailability(true);
 
         // Subscribe comandos outlets 1..9
@@ -71,21 +74,21 @@ public:
           (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
         }
 
+        // Subscribe admin config
+        (void)hal::mqtt().subscribe(_cmdCfgTopic);
+
         // Discovery (una vez por arranque/conexión)
-        // NOTA: ha_discovery.cpp actualmente usa FERDUINO_DEVICE_ID por macro.
-        // En B3.3/B4 lo haremos runtime también (pasando deviceId o leyendo cfg dentro).
         if (!_discoveryPublished) {
           app::ha::publishDiscoveryMinimal();
           _discoveryPublished = true;
         }
 
-        // Publica estado inicial (placeholder coherente con HA discovery)
         publishStatePlaceholder();
       }
       return;
     }
 
-    // Refresco ligero de estado cada 5s (placeholder) para observabilidad
+    // refresco ligero de estado cada 5s (placeholder)
     const uint32_t now = millis();
     if (now - _lastStateMs > 5000) {
       _lastStateMs = now;
@@ -98,7 +101,6 @@ public:
   }
 
   bool publishStatus(const char* key, const char* value, bool retained=false) override {
-    // Helper mínimo: publica JSON de 1 clave. Se mantiene por compatibilidad con la interfaz.
     if (!key || !value) return false;
 
     char msg[180];
@@ -115,7 +117,14 @@ public:
   void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
     if (!topic || !payload || len == 0) return;
 
-    // Copia payload a buffer
+    // B3.4: admin config primero
+    if (app::cfgadmin::handleConfigCommand(topic, payload, len)) {
+      // Si quieres, aquí podríamos marcar "reinit pending"
+      // pero por ahora solo respondemos ACK y seguimos.
+      return;
+    }
+
+    // Copia payload
     const size_t n = (len >= sizeof(_rx)) ? (sizeof(_rx) - 1) : len;
     memcpy(_rx, payload, n);
     _rx[n] = '\0';
@@ -125,8 +134,6 @@ public:
       if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
         const uint8_t v = (_rx[0] == '1') ? 1 : 0;
         app::ha::applyOutletCommand((uint8_t)i, v);
-
-        // Publica estado actualizado coherente con HA discovery
         publishStatePlaceholder();
         return;
       }
@@ -149,12 +156,7 @@ private:
   }
 
   void publishStatePlaceholder() {
-    // Publica un state mínimo coherente con el discovery (B2.x):
-    // - water_temperature, heatsink_temperature, ambient_temperature (placeholder)
-    // - water_ph, reactor_ph, orp, salinity (placeholder)
-    // - led_*_power (placeholder)
-    // - outlet_1..outlet_9 (estado HA simulado)
-    // - uptime (segundos)
+    // Estado mínimo coherente con discovery B3.x
     const float water_temperature    = 0.0f;
     const float heatsink_temperature = 0.0f;
     const float ambient_temperature  = 0.0f;
@@ -233,6 +235,7 @@ private:
 
   // cmd topics outlets 1..9 (índice 1..9)
   char _cmdOutletTopic[10][96] = {{0}};
+  char _cmdCfgTopic[96] = {0};
 
   char _rx[32] = {0};
 };

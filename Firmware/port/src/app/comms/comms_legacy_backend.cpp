@@ -1,7 +1,9 @@
 #include "app/comms_backend.h"
 #include "app/comms_mode.h"
 #include "app/comms/ha/ha_legacy_bridge.h"
+
 #include "app/config/app_config.h"
+#include "app/config/app_config_mqtt_admin.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -9,8 +11,9 @@
 #include <Arduino.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
-/* ==== Build flags obligatorios ==== */
+/* ==== Build flags obligatorios (legacy auth) ==== */
 
 #ifndef FERDUINO_LEGACY_USERNAME
   #error "Define FERDUINO_LEGACY_USERNAME in platformio.ini build_flags"
@@ -45,7 +48,9 @@ static void publishJson(const char* pubTopic, const char* json, bool retained = 
 class CommsLegacyBackend final : public ICommsBackend {
 public:
   void begin() override {
-    // B3.2: MQTT host/port/clientId vienen de EEPROM (app::cfg)
+    // No hay setup() global todavía -> garantizamos cfg en RAM
+    (void)app::cfg::loadOrDefault();
+
     const auto& appcfg = app::cfg::get();
 
     hal::MqttConfig cfg;
@@ -59,6 +64,10 @@ public:
 
     makeTopic(_subTopic, sizeof(_subTopic), "topic/command");
     makeTopic(_pubTopic, sizeof(_pubTopic), "topic/response");
+
+    // admin config topic (siempre disponible aunque backend sea legacy)
+    snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic),
+             "ferduino/%s/cmd/config", appcfg.mqtt.deviceId);
 
     _lastReconnectMs = 0;
   }
@@ -79,6 +88,9 @@ public:
 
       if (hal::mqtt().connect() == hal::MqttError::Ok) {
         (void)hal::mqtt().subscribe(_subTopic);
+
+        // subscribe admin config
+        (void)hal::mqtt().subscribe(_cmdCfgTopic);
 
         // Online retained (útil para legacy; si molestase, se retira)
         const char online[] = "{\"online\":1}";
@@ -107,11 +119,16 @@ public:
     ) == hal::MqttError::Ok;
   }
 
-  void onMqttMessage(const char*,
+  void onMqttMessage(const char* topic,
                      const uint8_t* payload,
                      size_t len) override {
-    if (!payload || len == 0)
+    if (!topic || !payload || len == 0)
       return;
+
+    // B3.4: admin config primero
+    if (app::cfgadmin::handleConfigCommand(topic, payload, len)) {
+      return;
+    }
 
     // Copia a buffer y termina en '\0'
     const size_t max = sizeof(_rxBuf) - 1;
@@ -119,12 +136,12 @@ public:
     memcpy(_rxBuf, payload, n);
     _rxBuf[n] = '\0';
 
-    // Legacy terminator 'K' (igual que original Webserver.h)
+    // Legacy terminator 'K'
     char* kpos = strchr(_rxBuf, 'K');
     if (!kpos)
       return;
 
-    // Original hace inData[j-1] = '\0' (elimina la coma antes de K)
+    // Original: elimina la coma antes de K
     if (kpos > _rxBuf)
       *(kpos - 1) = '\0';
 
@@ -164,7 +181,6 @@ public:
       case 15: handleOrp_ID15(argc); break;
       case 16: handleDensity_ID16(argc); break;
       case 17: handleFilePump_ID17(argc); break;
-
       default:
         publishUnknown(id);
         break;
@@ -573,6 +589,7 @@ private:
 
   char _subTopic[64] = {0};
   char _pubTopic[64] = {0};
+  char _cmdCfgTopic[96] = {0};
 
   uint32_t _lastReconnectMs = 0;
 
