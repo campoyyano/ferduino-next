@@ -1,5 +1,91 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+---
+
+## B4 – Persistencia de configuración (EEPROM / NVM)
+
+### B4.1 – Análisis de EEPROM del firmware original
+
+**Objetivo**
+Identificar el uso real de EEPROM en el firmware original Ferduino para:
+- Mantener compatibilidad binaria.
+- Definir el mapa de memoria persistente en ferduino-next.
+- Preparar la futura HAL de almacenamiento (EEPROM / FRAM / Flash).
+
+**Acciones realizadas**
+
+1. Revisión del proyecto original:
+   - Búsqueda de:
+     - `EEPROM.read`
+     - `EEPROM.write`
+     - `EEPROM.get`
+     - `EEPROM.put`
+     - `writeAnything`
+   - Identificación de estructuras persistidas completas.
+
+2. Identificación de patrones de uso:
+   - Uso de **bloques estructurados** (struct completos).
+   - Direcciones base fijas (layout estático).
+   - Inicialización por defecto cuando EEPROM no contiene valores válidos.
+   - Dependencia de estos datos en:
+     - Configuración de red
+     - Parámetros del sistema
+     - Calibraciones
+     - Configuración de dispositivos
+
+3. Conclusiones de arquitectura
+
+- El firmware original **no usa key-value**, sino layout binario fijo.
+- Para compatibilidad:
+  
+  ferduino-next debe:
+  - Mantener offsets equivalentes.
+  - Usar las mismas estructuras o equivalentes binarias.
+  - Detectar EEPROM no inicializada.
+
+4. Decisiones de diseño
+
+Se define una capa de abstracción futura:
+
+Storage HAL (NVM)
+↓
+EEPROM interna (Mega)
+FRAM externa (futuro)
+Flash emulada (MCUs sin EEPROM)
+
+Estrategia:
+
+- Layout fijo compatible con original
+- Detección por **Magic Header**
+- Soporte de migración futura
+
+Magic propuesto:
+
+Offset 0:
+uint32_t magic = 0x4652444E // 'FRDN'
+uint16_t version
+
+
+Si no coincide:
+→ cargar defaults
+→ guardar estructura completa
+
+5. Preparación para hardware futuro
+
+Arquitectura preparada para:
+
+- EEPROM interna (ATmega)
+- FRAM pequeña → parámetros
+- FRAM grande → data logger
+- SD → almacenamiento histórico
+
+Sin cambios funcionales aún en el código (solo análisis y definición de arquitectura).
+
+**Estado**
+- Análisis completado
+- Compatibilidad definida
+- Listo para B4.2 (definición del layout en ferduino-next)
+
 ### [2026-02-06] B3.4 – Administración de configuración por MQTT (GET/SET + persistencia)
 
 - Se añade un canal de administración de configuración por MQTT:
