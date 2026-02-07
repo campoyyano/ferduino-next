@@ -1,8 +1,45 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+
 ---
 
-## B4 – Persistencia de configuración (EEPROM / NVM)
+## B4 – Persistencia (EEPROM / NVM)
+
+### B4.2 – Definición de layout dual de EEPROM (legacy + registry)
+
+**Objetivo**
+Congelar un mapa estable de EEPROM que:
+- mantenga compatibilidad con el firmware Ferduino original (layout fijo),
+- reserve una zona nueva para configuración versionada (registry TLV en B4.3),
+- evite pisar offsets legacy.
+
+**Decisión de layout (ATmega2560: 4096 bytes)**
+Se divide la EEPROM en dos zonas:
+
+| Zona | Rango | Uso | Política |
+|------|------|-----|----------|
+| Legacy (compat) | `0..1023` | offsets del firmware original | **RO** (no modificar) |
+| Registry (nuevo) | `1024..4095` | header + payload TLV + CRC | **RW** |
+
+Motivación:
+- El firmware original usa offsets hasta ~871 (y LEDs en 1..~480).
+- Reservamos 1KB completo (0..1023) para margen y estabilidad.
+- El resto queda libre para el registry nuevo (3072 bytes).
+
+**Archivos añadidos**
+- `include/app/nvm/eeprom_layout.h`
+  - Constantes de layout (bases, tamaños)
+  - `RegistryHeader` con `magic/version/flags/crc32`
+  - Magic definido: `'FDNX'` (`0x584E4446` little-endian)
+  - Flag reservado: `REGF_MIGRATED` (se usará en B4.4)
+- `docs/eeprom_map.md`
+  - Documento de contrato del mapa dual (legacy + registry)
+  - Referencia a la fuente legacy: `Modules/Funcoes_EEPROM.h` del firmware original
+
+**Impacto**
+- No hay cambios funcionales aún (solo contrato y documentación).
+- Prepara B4.3: implementación del registry TLV sobre `hal::storage()` y este layout.
+
 
 ### B4.1 – Análisis de EEPROM del firmware original
 
