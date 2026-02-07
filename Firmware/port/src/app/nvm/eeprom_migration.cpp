@@ -26,7 +26,7 @@ static bool readLegacy(uint16_t addr, void* dst, size_t len) {
 bool migrateLegacyIfNeeded() {
   auto& reg = registry();
 
-  // Robustez: si el registry no es válido aún, lo inicializamos.
+  // Si el registry no es válido aún, lo inicializamos.
   if (!reg.isValid()) {
     if (!reg.format()) {
       return false;

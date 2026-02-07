@@ -1,5 +1,30 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+---
+
+### B4.4 – Integración de migración legacy → registry (subset mínimo)
+
+**Objetivo**
+Evitar pérdida de compatibilidad: si el registry nuevo no existe o aún no ha migrado, importar parámetros mínimos desde offsets legacy del firmware original.
+
+**Implementación**
+- Se añade `app::nvm::migrateLegacyIfNeeded()`:
+  - Si `registry.isValid()==false` → `registry.format()` (inicializa header/payload)
+  - Si `flags & REGF_MIGRATED` → no hace nada
+  - Lee offsets legacy:
+    - temp water set/off/alarm: 482 (int16), 484 (u8), 485 (u8)
+  - Guarda en registry TLV keys (100..102) como enteros (valores en décimas x10)
+  - Marca `REGF_MIGRATED` mediante `registry.setFlags(...)`
+
+**Archivos**
+- `include/app/nvm/eeprom_migration.h`
+- `src/app/NVM/eeprom_migration.cpp`
+
+**Estado**
+- Compila correctamente y enlaza con `registry()` y `EepromRegistry::begin()`.
+- Siguiente: ampliar migración a parámetros de red/MQTT y comenzar B5 (config runtime desde registry).
+
+
 ### B4.4 – Migración Legacy → Registry
 
 Objetivo:

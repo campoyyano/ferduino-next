@@ -42,8 +42,7 @@ bool EepromRegistry::format() {
   _hdr.version = REGISTRY_VERSION;
   _hdr.flags = REGF_NONE;
 
-  // En payload vacío, CRC de 0 bytes => crc32("") = ~0? (según implementación).
-  // Aquí preferimos marcar crc32=0 para indicar "vacío/no inicializado".
+  // En payload vacío, CRC marcado como 0 para indicar "vacío/no inicializado".
   _hdr.crc32 = 0;
 
   _valid = true;
@@ -258,10 +257,10 @@ bool EepromRegistry::setStr(uint16_t key, const char* s) {
   if (!_valid) return false;
   if (!s) return false;
 
-  remove(key);
-
   const size_t len = strlen(s);
   if (len > 255) return false; // TLV len es u8
+
+  remove(key);
 
   const uint8_t l = (uint8_t)len;
   if (!tlv_append(_payload, REGISTRY_PAYLOAD_SIZE, key, (uint8_t)TlvType::Str, (const uint8_t*)s, l)) return false;
