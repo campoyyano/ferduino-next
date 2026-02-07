@@ -5,6 +5,35 @@
 
 ## B4 – Persistencia (EEPROM / NVM)
 
+### B4.3 – Registry TLV versionado (zona nueva)
+
+**Objetivo**
+Implementar un registro de configuración versionado sobre la zona nueva de EEPROM (1024..4095), desacoplado del layout legacy, usando `hal::storage()`.
+
+**Implementación**
+- Se añade `EepromRegistry` con formato TLV:
+  - Entry: `[key:u16][type:u8][len:u8][value:len]`
+  - Payload ocupa toda la zona `REGISTRY_PAYLOAD_SIZE` (tras el header)
+- Header fijo (`RegistryHeader`) en `REGISTRY_BASE`:
+  - `magic='FDNX'`, `version=1`, `flags`, `crc32`
+- Validación:
+  - Si `magic/version` no coinciden → registry no inicializado (no es error)
+  - Si `crc32 != 0` → se valida contra `payload`
+  - Si `crc32 == 0` → se considera payload vacío/skip CRC
+
+**Archivos añadidos**
+- `include/app/nvm/eeprom_registry.h`
+- `src/app/nvm/eeprom_registry.cpp`
+- (documentación legacy) `docs/eeprom_legacy_map.md`
+
+**Notas**
+- Diseño sin heap, apto para AVR.
+- `Log/Archive` siguen pendientes (FRAM/SD) y se integrarán a través de `hal::storage()` cuando exista hardware.
+
+**Siguiente**
+- B4.4: detección legacy + migración mínima (solo claves críticas primero) y set de flag `REGF_MIGRATED`.
+
+
 ### B4.2 – Definición de layout dual de EEPROM (legacy + registry)
 
 **Objetivo**
