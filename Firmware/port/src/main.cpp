@@ -5,10 +5,13 @@
 #include "hal/hal_time.h"
 #include "hal/hal_log.h"
 #include "app/app_smoketests.h"
-
+#include "app/nvm/eeprom_registry.h"
+#include "app/nvm/eeprom_migration.h"
 
 void setup() {
   Serial.begin(115200);
+  app::nvm::registry().begin();
+  app::nvm::migrateLegacyIfNeeded();
 
   pinMode(alarmPin, OUTPUT);
   pinMode(desativarFanPin, OUTPUT);

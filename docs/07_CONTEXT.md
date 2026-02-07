@@ -1,9 +1,30 @@
 # Ferduino-next – Firmware PORT – Contexto del Proyecto
 
+### B4.4 – Migración Legacy → Registry
 
----
+Objetivo:
+Permitir que dispositivos existentes con EEPROM del firmware original
+se actualicen automáticamente al nuevo sistema.
 
-## B4 – Persistencia (EEPROM / NVM)
+Comportamiento:
+- Si registry no existe → format()
+- Si flag REGF_MIGRATED no está:
+    - Leer parámetros críticos desde offsets legacy
+    - Escribirlos como TLV en registry
+    - Set flag REGF_MIGRATED
+
+Migración inicial:
+- Temperatura agua:
+    offsets 482..485 (valores en décimas)
+
+Impacto:
+- Compatibilidad hacia atrás garantizada
+- A partir de la migración el sistema usa solo registry nuevo
+- Zona legacy permanece en modo solo lectura
+
+Siguiente:
+B5 – Inicio del uso del registry desde backends/configuración
+
 
 ### B4.3 – Registry TLV versionado (zona nueva)
 
