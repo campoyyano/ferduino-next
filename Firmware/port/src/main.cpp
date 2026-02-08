@@ -5,13 +5,19 @@
 #include "hal/hal_time.h"
 #include "hal/hal_log.h"
 #include "app/app_smoketests.h"
+
 #include "app/nvm/eeprom_registry.h"
 #include "app/nvm/eeprom_migration.h"
+#include "app/config/app_config.h"
 
 void setup() {
   Serial.begin(115200);
-  app::nvm::registry().begin();
-  app::nvm::migrateLegacyIfNeeded();
+
+  // NVM: inicializa registry TLV (>=1024) y migra subset legacy si aplica.
+  // Importante: no escribir jamás en 0..1023 desde el port.
+  (void)app::nvm::registry().begin();
+  (void)app::nvm::migrateLegacyIfNeeded();
+  (void)app::cfg::loadOrDefault();
 
   pinMode(alarmPin, OUTPUT);
   pinMode(desativarFanPin, OUTPUT);
@@ -19,7 +25,6 @@ void setup() {
   Serial.println("ferduino-next: port skeleton");
   Serial.print("Perfil de pines: ");
   Serial.println(PINS_PROFILE);
-  
 }
 
 void loop() {
@@ -29,45 +34,34 @@ void loop() {
   digitalWrite(alarmPin, LOW);
   delay(800);
 
-
 #if (SMOKETEST == SMOKETEST_GPIO)
-  // A2: test mínimo (LED D13)
   app_gpio_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_FERDUINO_PINS)
-  // A3: test con pines reales Ferduino
   app_ferduino_pins_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_PWM)
-  // A4: test con pwm pines reales arduino
   app_pwm_leds_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_IOX)
-  //A5: Test del PCF8575
   app_ioexpander_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_RTC)
-   // A7: Test RTC
   app_rtc_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_RELAY)
-  // A8: PCF8575 Test_2;
   app_relay_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_SERIAL)
-  // A6: Test Uart/Debug
   app_serial_smoketest_run();
 
 #elif (SMOKETEST == SMOKETEST_NETWORK)
-  //A9: Test Network
   app_network_smoketest();
+
 #elif (SMOKETEST == SMOKETEST_MQTT)
-  //A9: Test MQTT
   app_mqtt_smoketest();
+
 #else
-  #error "SMOKETEST invalido. Revisa smoketest_select.h"
+  // Default: nada
 #endif
-
 }
-
-

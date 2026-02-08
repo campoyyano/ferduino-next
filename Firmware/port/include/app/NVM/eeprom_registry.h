@@ -18,7 +18,7 @@ enum class TlvType : uint8_t {
   Str   = 6, // bytes sin null-terminator
 };
 
-// Registro TLV simple sobre la zona REGISTRY_*.
+// Registro TLV simple sobre la zona REGISTRY_*
 // Diseño: sin heap, con buffer interno (≈3KB) válido en Mega2560.
 class EepromRegistry {
 public:
@@ -28,13 +28,18 @@ public:
   bool commit();              // escribe header+payload y crc
 
   uint16_t flags() const { return _hdr.flags; }
-  bool setFlags(uint16_t flags); // actualiza flags y commit
+  bool setFlags(uint16_t flags); // actualiza flags y commit (o defer si editing)
+
+  // Transacción opcional: permite agrupar múltiples set/remove en un solo commit.
+  bool beginEdit();
+  bool endEdit();
+  bool isEditing() const { return _editing; }
 
   // Getters básicos
   bool getU32(uint16_t key, uint32_t& out) const;
   bool getI32(uint16_t key, int32_t& out) const;
   bool getBool(uint16_t key, bool& out) const;
-  bool getStr(uint16_t key, char* out, size_t outLen) const; // escribe null-terminator si cabe
+  bool getStr(uint16_t key, char* out, size_t outLen) const; // null-terminator si cabe
 
   // Setters básicos
   bool setU32(uint16_t key, uint32_t v);
@@ -54,10 +59,9 @@ private:
 
   // Buffer payload (zona registry sin header)
   alignas(2) uint8_t _payload[REGISTRY_PAYLOAD_SIZE]{};
-  size_t _payloadLen = 0;
-
   RegistryHeader _hdr{};
   bool _valid = false;
+  bool _editing = false;
 };
 
 // Service accessor (singleton sin heap)

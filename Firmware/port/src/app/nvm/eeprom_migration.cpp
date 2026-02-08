@@ -9,10 +9,10 @@
 
 namespace app::nvm {
 
-// Keys (subset mínimo inicial)
-static constexpr uint16_t KEY_TEMP_SET_10   = 100;
-static constexpr uint16_t KEY_TEMP_OFF_10   = 101;
-static constexpr uint16_t KEY_TEMP_ALARM_10 = 102;
+// B4: mapa inicial de keys (subset mínimo). Se ampliará en iteraciones.
+static constexpr uint16_t KEY_TEMP_SET_10   = 100; // int32 (legacy int16 en décimas)
+static constexpr uint16_t KEY_TEMP_OFF_10   = 101; // int32 (legacy uint8 en décimas)
+static constexpr uint16_t KEY_TEMP_ALARM_10 = 102; // int32 (legacy uint8 en décimas)
 
 // Offsets legacy (Ferduino original - Funcoes_EEPROM.h)
 static constexpr uint16_t LEGACY_TEMP_SET_ADDR   = 482; // int16
@@ -20,20 +20,20 @@ static constexpr uint16_t LEGACY_TEMP_OFF_ADDR   = 484; // byte
 static constexpr uint16_t LEGACY_TEMP_ALARM_ADDR = 485; // byte
 
 static bool readLegacy(uint16_t addr, void* dst, size_t len) {
+  // Lee directo de EEPROM legacy (región Config)
   return hal::storage().read(hal::StorageRegion::Config, addr, dst, len);
 }
 
 bool migrateLegacyIfNeeded() {
   auto& reg = registry();
 
-  // Si el registry no es válido aún, lo inicializamos.
+  // Si el registry no existe aún, lo inicializamos.
   if (!reg.isValid()) {
     if (!reg.format()) {
       return false;
     }
   }
 
-  // Ya migrado
   if (reg.flags() & REGF_MIGRATED) {
     return true;
   }
@@ -47,13 +47,13 @@ bool migrateLegacyIfNeeded() {
   (void)readLegacy(LEGACY_TEMP_OFF_ADDR, &off10, sizeof(off10));
   (void)readLegacy(LEGACY_TEMP_ALARM_ADDR, &alarm10, sizeof(alarm10));
 
-  // Legacy guarda en décimas (x10)
+  // Guardamos como int32 por simplicidad.
+  (void)reg.beginEdit();
   (void)reg.setI32(KEY_TEMP_SET_10, (int32_t)set10);
   (void)reg.setI32(KEY_TEMP_OFF_10, (int32_t)off10);
   (void)reg.setI32(KEY_TEMP_ALARM_10, (int32_t)alarm10);
-
-  // Marca migración completada
-  return reg.setFlags((uint16_t)(reg.flags() | REGF_MIGRATED));
+  (void)reg.setFlags((uint16_t)(reg.flags() | REGF_MIGRATED));
+  return reg.endEdit();
 }
 
 } // namespace app::nvm

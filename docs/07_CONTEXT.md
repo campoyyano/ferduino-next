@@ -1,6 +1,89 @@
-# Ferduino-next – Firmware PORT – Contexto del Proyecto
+# ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
+
+## Reglas de trabajo (acordadas)
+- **Commits cortos y frecuentes**: cada paso cerrado (A9.x / Bx.y) → commit + actualización de este archivo.
+- **Sin parches sueltos**: cuando se toca un archivo, se pega el fichero completo para evitar errores.
+- **Compatibilidad legacy**: mantener firmware original en `Firmware/Original/` intacto.
+- **Port (HAL + app mínima)** vive en `Firmware/port/`.
+- **Zona EEPROM 0..1023**: se trata como **legacy read-only** (no escribir desde el port).
 
 ---
+
+## Estado actual (alto nivel)
+
+### A — HAL (port)
+- A2 GPIO / smoketests: OK
+- A3 Perfil de pines Ferduino: OK
+- A4 PWM: OK
+- A5 IO Expander PCF8575: OK
+- A6 Serial/debug: OK
+- A7 RTC: OK
+- A8 Relays: OK
+- A9 Ethernet + MQTT (Ethernet W5x00 + PubSubClient): OK (smoketests listos, sin placa aún)
+
+### B — Comunicaciones y HA
+- B1: Preparación comms facade + selección por `FERDUINO_COMMS_MODE`: OK
+- B2: Backend legacy MQTT implementado (IDs 0..17) + glosario del protocolo: OK
+- B3: Estructura HA (discovery/bridge/outlet control) y compilación: OK (sin hardware)
+
+### B4 — NVM (EEPROM/registry)
+Objetivo: permitir configuración persistente sin recompilar, manteniendo compatibilidad con EEPROM legacy del Ferduino original.
+
+- B4.1: Definir filosofía NVM:
+  - Registry TLV con header + payload + CRC
+  - Magic/version/flags (REGF_MIGRATED)
+  - Migración idempotente desde legacy
+  - HAL de storage para poder migrar a FRAM/Flash en el futuro
+
+- B4.2/B4.3: Layout EEPROM:
+  - 0..1023 => LEGACY (solo lectura / migración)
+  - 1024..4095 => REGISTRY TLV (RW)
+
+---
+
+## Paso actual en curso
+### B5.1 — Consumir registry desde AppConfig (NO usar EEPROM offset 0)
+Problema detectado:
+- `app_config` escribía un bloque en EEPROM offset 0, rompiendo compatibilidad legacy.
+
+Solución aplicada:
+- `app_config` ahora guarda/carga por **keys TLV** vía `app::nvm::registry()`.
+- Se añadió modo transacción `beginEdit/endEdit` para reducir commits.
+- `main.cpp` inicializa:
+  - `registry().begin()`
+  - `migrateLegacyIfNeeded()`
+  - `cfg::loadOrDefault()`
+
+Keys TLV iniciales (AppConfig):
+- 200 MQTT host (str)
+- 201 MQTT port (u32)
+- 204 device id (str)
+- 205 backend mode (u32: 0 legacy / 1 HA)
+- 210 DHCP (bool)
+- 211 IP (u32 packed)
+- 212 GW (u32 packed)
+- 213 subnet (u32 packed)
+- 214 DNS (u32 packed)
+- 215 MAC (str "02:FD:00:00:00:01")
+
+Notas:
+- Migración legacy (subset inicial) a keys 100..102:
+  - Temp set/off/alarm (décimas)
+- Ampliar migración según se porten módulos del firmware original.
+
+---
+
+## Documentos generados / adjuntos al repo
+- `AUDIT_CODEX_B4.md`: auditoría y checklist NVM
+- `NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md`: mapa de keys y layout EEPROM
+- `PORTING_PLAN_B5_B6.md`: plan de portado de módulos del Ferduino original
+
+---
+
+## Próximos pasos
+- B5.2: Extender `EepromMigration` con más variables legacy (según `Funcoes_EEPROM.h` del original).
+- B6.x: Empezar portado incremental de módulos del Ferduino original usando flags y manteniendo build mínimo.
+- Futuro hardware: evaluar FRAM pequeña para parámetros + FRAM grande/SD para logger.
 
 ### B4.4 – Integración de migración legacy → registry (subset mínimo)
 

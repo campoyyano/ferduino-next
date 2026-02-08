@@ -3,49 +3,34 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// HAL de almacenamiento persistente.
-// Diseñado para:
-// - Hoy: EEPROM AVR (Config)
-// - Mañana: FRAM pequeña (Config) + FRAM grande (Log) + SD (Archive)
-//
-// Nota: este header NO debe incluir headers de plataforma (EEPROM.h, Wire.h, etc.).
-// La implementación vive en src/hal/impl/<platform>/.
-
 namespace hal {
 
-// Regiones lógicas de almacenamiento.
-// En B4.1 solo implementamos Config (EEPROM AVR).
+// Región lógica de almacenamiento no volátil.
+// En Mega2560 hoy solo usamos EEPROM interna, pero la interfaz permite
+// migrar a FRAM/Flash/otros sin cambiar capas superiores.
 enum class StorageRegion : uint8_t {
-  Config  = 0,  // parámetros / registry
-  Log     = 1,  // logger (FRAM grande)
-  Archive = 2,  // histórico (SD)
+  Config = 0, // Configuración + registry TLV
+  Log    = 1, // Futuro: logger
 };
 
+// HAL de almacenamiento no volátil.
+// Contrato:
+// - read/write operan sobre offsets absolutos dentro de la región.
+// - commit() aplica los cambios si la implementación tiene buffer.
 class IStorageHal {
 public:
   virtual ~IStorageHal() = default;
 
-  // Inicializa el backend (en AVR EEPROM suele ser no-op).
   virtual bool begin() = 0;
 
-  // Capacidad de la región en bytes. 0 => región no soportada.
-  virtual uint32_t capacity(StorageRegion region) const = 0;
+  virtual bool read(StorageRegion region, uint16_t offset, void* dst, size_t len) = 0;
+  virtual bool write(StorageRegion region, uint16_t offset, const void* src, size_t len) = 0;
 
-  // Lectura/escritura en un offset dentro de la región.
-  virtual bool read(StorageRegion region, uint32_t offset, void* dst, size_t len) = 0;
-  virtual bool write(StorageRegion region, uint32_t offset, const void* src, size_t len) = 0;
-
-  // Commit explícito:
-  // - AVR EEPROM: no-op (true)
-  // - Flash emulada / NVS: necesario
-  // - SD: flush/sync
+  // En EEPROM interna suele ser no-op; en FRAM/Flash puede ser necesario.
   virtual bool commit(StorageRegion region) = 0;
-
-  // Borrado lógico de región (factory reset). Si no se soporta, false.
-  virtual bool erase(StorageRegion region) = 0;
 };
 
-// Service locator (igual que hal::network()).
+// Acceso al singleton de almacenamiento.
 IStorageHal& storage();
 
 } // namespace hal
