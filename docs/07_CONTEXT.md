@@ -1,5 +1,28 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.4 — Runtime skeleton (sin smoketests) + arranque mínimo real
+
+Se introduce modo `SMOKETEST_NONE` para ejecutar un flujo runtime mínimo en vez de smoketests:
+
+Orden de arranque:
+1) `app::nvm::registry().begin()`
+2) `app::nvm::migrateLegacyIfNeeded()`
+3) `app::cfg::loadOrDefault()`
+4) `hal::network().begin(cfg.net)`
+5) `app::comms().begin()` (selección legacy/HA por config + init MQTT/callbacks)
+
+Loop runtime:
+- `hal::network().loop()`
+- `app::comms().loop()`
+
+Cambios clave:
+- `include/app/app_smoketests.h`: se definen IDs numéricos de smoketests y `SMOKETEST_NONE`.
+- Nuevo módulo runtime:
+  - `include/app/runtime/app_runtime.h`
+  - `src/app/runtime/app_runtime.cpp`
+- `src/main.cpp`: ejecuta runtime si `SMOKETEST == SMOKETEST_NONE`.
+
+
 ## B5.3 — Migración legacy ampliada (Outlets + Dosificadora) → Registry TLV
 
 Se amplía `app::nvm::migrateLegacyIfNeeded()` para copiar más estado desde EEPROM legacy (0..1023)
