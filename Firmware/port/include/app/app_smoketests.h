@@ -1,23 +1,27 @@
 #pragma once
 
-#define SMOKETEST_NONE          0
-#define SMOKETEST_GPIO          1
-#define SMOKETEST_FERDUINO_PINS 2
-#define SMOKETEST_PWM           3
-#define SMOKETEST_IOX           4
-#define SMOKETEST_RTC           5
-#define SMOKETEST_RELAY         6
-#define SMOKETEST_SERIAL        7
-#define SMOKETEST_NETWORK       8
-#define SMOKETEST_MQTT          9
+// Valores numéricos para poder usar SMOKETEST en expresiones del preprocesador
+// (evita caer en fallback silencioso si alguien pasa un valor inválido).
+#ifndef SMOKETEST_NONE
+  #define SMOKETEST_NONE          0
+  #define SMOKETEST_GPIO          1
+  #define SMOKETEST_FERDUINO_PINS 2
+  #define SMOKETEST_PWM           3
+  #define SMOKETEST_IOX           4
+  #define SMOKETEST_RTC           5
+  #define SMOKETEST_RELAY         6
+  #define SMOKETEST_SERIAL        7
+  #define SMOKETEST_NETWORK       8
+  #define SMOKETEST_MQTT          9
+#endif
 
 void app_gpio_smoketest_run();
 void app_ferduino_pins_smoketest_run();
 void app_pwm_leds_smoketest_run();
 void app_pcf8575_smoketest_run();
 void app_ioexpander_smoketest_run();
-void app_serial_smoketest_run();
 void app_rtc_smoketest_run();
 void app_relay_smoketest_run();
+void app_serial_smoketest_run();
 void app_network_smoketest();
 void app_mqtt_smoketest();

@@ -39,7 +39,28 @@ Semántica CRC y migración:
 
 ## C) Tabla de KEYS del registry (actuales)
 
-Estado real (post B5.3): se añaden keys para outlets + dosificación además de temperatura.
+Estado real (post B5.x): además de migración legacy (temperaturas/outlets/dosificación), ya existen keys de configuración de red/MQTT para el runtime (AppConfig).
+
+### C.0 Configuración (AppConfig / network / MQTT)
+
+Estas keys vienen de:
+- `Firmware/port/include/app/config/app_config_keys.h`
+- `Firmware/port/src/app/config/app_config.cpp`
+
+> Nota: esta persistencia NO existe en el firmware original (legacy), donde broker/credenciales suelen ser compile-time.
+
+| Key ID (u16) | Nombre estable | Tipo TLV | Semántica | Origen |
+|---:|---|---|---|---|
+| `200` | `mqtt.host` | `Str` | Hostname/IP del broker | Port (AppConfig) |
+| `201` | `mqtt.port` | `U32` | Puerto broker MQTT | Port (AppConfig) |
+| `204` | `mqtt.device_id` | `Str` | DeviceId (base de topics ferduino/<deviceId>/...) | Port (AppConfig) |
+| `205` | `backend.mode` | `U32` | 0=Legacy, 1=HA | Port (AppConfig) |
+| `210` | `net.dhcp` | `Bool` | true=DHCP, false=estática | Port (AppConfig) |
+| `211` | `net.ip` | `U32` | IPv4 packed a\|b<<8\|c<<16\|d<<24 | Port (AppConfig) |
+| `212` | `net.gw` | `U32` | Gateway IPv4 packed | Port (AppConfig) |
+| `213` | `net.subnet` | `U32` | Subnet IPv4 packed | Port (AppConfig) |
+| `214` | `net.dns` | `U32` | DNS IPv4 packed | Port (AppConfig) |
+| `215` | `net.mac` | `Str` | MAC "02:FD:00:00:00:01" (17 chars) | Port (AppConfig) |
 
 ### C.1 Temperatura (agua)
 
@@ -71,7 +92,7 @@ Estado real (post B5.3): se añaden keys para outlets + dosificación además de
 | `580..585` | `dosing.chN.end_min` | `U32` | minuto fin | `649..654` | Migrado |
 
 Notas:
-- `days_mask`: bit0=Mon(segunda), bit1=Tue(terca), bit2=Wed(quarta), bit3=Thu(quinta), bit4=Fri(sexta), bit5=Sat(sabado), bit6=Sun(domingo).
+- `days_mask`: bit0=Lun, bit1=Mar, bit2=Mié, bit3=Jue, bit4=Vie, bit5=Sáb, bit6=Dom.
 
 ## D) Mapa EEPROM legacy (Original)
 
@@ -83,12 +104,14 @@ Fuente principal de offsets legacy:
 
 ### D.1 Network/MQTT (host/port/user/apikey/deviceId)
 
-No se encontró persistencia EEPROM para host/port/username/apikey/clientId en el original.
+En el firmware original (legacy) **no se encontró persistencia EEPROM** para host/port/username/apikey/clientId.
 
-- `Username` y `APIKEY` están en compile-time: `Configuration.h`
-- Broker y puerto fijos en setup (`MQTT.setServer("www.ferduino.com", 1883)`)
+- `Username` y `APIKEY` suelen ser compile-time: `Configuration.h`
+- Broker y puerto suelen ser fijos en código (ej: `setServer("www.ferduino.com", 1883)`)
 
-Conclusión: en legacy original, `network/mqtt` es mayormente estático (no EEPROM); en el port se migra a registry.
+Conclusión:
+- En legacy original, `network/mqtt` es mayormente estático (no EEPROM).
+- En el port, `network/mqtt/backendMode` **sí** se persisten vía registry TLV (keys `200..215`) para permitir configuración sin recompilar (B6+).
 
 ### D.2 Offsets relevantes (subset migrado)
 
@@ -113,8 +136,8 @@ Conclusión: en legacy original, `network/mqtt` es mayormente estático (no EEPR
 
 Rangos reservados por dominio (propuesto):
 
-- `100-199`: temps
-- `200-299`: mqtt/network
+- `100-199`: temps (migración legacy y sensores)
+- `200-299`: network/mqtt/backend (AppConfig)
 - `300-399`: relays/outlets
 - `400-499`: pwm/led
 - `500-599`: dosing

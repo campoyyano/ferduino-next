@@ -17,6 +17,8 @@ struct Ip4 {
 struct NetworkConfig {
   uint8_t mac[6];
   bool useDhcp;
+
+  // Si useDhcp == false:
   Ip4 ip;
   Ip4 gateway;
   Ip4 subnet;
@@ -24,14 +26,18 @@ struct NetworkConfig {
 };
 
 struct MqttConfig {
-  char host[64];
+  const char* host;
   uint16_t port;
-  char deviceId[48];
+
+  const char* deviceId;   // topic base ferduino/<deviceId>/...
+  const char* clientId;   // MQTT client id (puede coincidir o no con deviceId)
+
+  const char* username;   // legacy (si aplica)
+  const char* apikey;     // legacy (si aplica)
 };
 
 struct AppConfig {
-  uint32_t magic;     // 'FDNX'
-  uint16_t version;   // incrementa si cambia layout
+  uint16_t version;   // schema version
   uint16_t size;      // sizeof(AppConfig)
   uint32_t crc32;     // CRC sobre el bloque (crc32=0 mientras se calcula)
 
@@ -42,9 +48,9 @@ struct AppConfig {
 
 // API
 const AppConfig& get();              // acceso read-only al config en RAM
-bool loadOrDefault();                // carga EEPROM o defaults (build_flags)
-bool save();                         // escribe EEPROM (con CRC)
-void factoryReset();                 // borra y vuelve a defaults en RAM
+bool loadOrDefault();                // carga desde NVM registry (TLV) o aplica defaults (build_flags)
+bool save();                         // guarda en NVM registry (TLV) con CRC
+void factoryReset();                 // borra keys en NVM registry y vuelve a defaults en RAM
 
 // NUEVO B3.4: aplicar config en RAM (sin guardar aún)
 void set(const AppConfig& cfg);

@@ -1,5 +1,19 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## Pre-B6 — Fixes audit Codex (consistencia y robustez)
+
+- SMOKETEST:
+  - Se definen constantes numéricas en `include/app/app_smoketests.h`.
+  - Se añade `SMOKETEST_NONE`.
+  - En `src/main.cpp` se elimina fallback silencioso y se fuerza `#error` si SMOKETEST no está soportado.
+
+- Docs NVM:
+  - `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md`: Outlets (310..319) y Dosing (500..585) pasan a estado "Migrado ya" para reflejar `src/app/nvm/eeprom_migration.cpp`.
+
+- Comentarios config:
+  - `include/app/config/app_config.h`: comentarios del API actualizados para reflejar NVM registry TLV en vez de "EEPROM directa".
+
+
 ## B5.7 — Info retained + telemetría mínima (uptime)
 
 Se añade publicación de “birth certificate” y heartbeat:
