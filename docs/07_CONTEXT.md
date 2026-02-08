@@ -1,5 +1,43 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.3 — Migración legacy ampliada (Outlets + Dosificadora) → Registry TLV
+
+Se amplía `app::nvm::migrateLegacyIfNeeded()` para copiar más estado desde EEPROM legacy (0..1023)
+hacia el registry TLV (1024..4095), manteniendo idempotencia mediante `REGF_MIGRATED`.
+
+### Outlets
+- Legacy:
+  - sentinel: `840` debe ser `66`
+  - data: `841..849` (9 bytes)
+- Registry:
+  - `310 outlet.block_valid` (Bool)
+  - `311..319 outlet.N.state` (U32)
+
+### Dosificadora (6 canales)
+- Legacy:
+  - sentinel: `706` debe ser `66`
+  - dosis personalizada: `545` (6 x int16 x10)
+  - start hour: `557..562`
+  - start min: `583..588`
+  - días: `589..625` (segunda..domingo por canal)
+  - qty: `631..636`
+  - enabled: `637..642`
+  - end hour: `643..648`
+  - end min: `649..654`
+- Registry:
+  - `500 dosing.block_valid` (Bool)
+  - `510..515 dosing.chN.dose_x10` (I32)
+  - `520..525 start_hour` (U32)
+  - `530..535 start_min` (U32)
+  - `540..545 days_mask` (U32; bit0=Mon..bit6=Sun)
+  - `550..555 quantity` (U32)
+  - `560..565 enabled` (Bool)
+  - `570..575 end_hour` (U32)
+  - `580..585 end_min` (U32)
+
+Docs actualizados: `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md`.
+
+
 ## B5.2 — MQTT Admin (config runtime por MQTT, persistente en registry TLV)
 Se implementa canal MQTT de administración:
 
