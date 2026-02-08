@@ -1,5 +1,25 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.2 — MQTT Admin (config runtime por MQTT, persistente en registry TLV)
+Se implementa canal MQTT de administración:
+
+- Topic comando: `ferduino/<deviceId>/cmd/config`
+- Operaciones:
+  - `get`/`GET`/`?` -> publica JSON de config actual en `ferduino/<deviceId>/cfg` (retained)
+  - JSON set parcial -> aplica cambios en RAM, persiste con `app::cfg::save()` (registry TLV), responde ACK
+
+Campos soportados en JSON:
+- `backend`: `"legacy"` | `"ha"`
+- `mqtt_host`, `mqtt_port`, `device_id`
+- `net_dhcp`
+- `net_ip`, `net_gw`, `net_subnet`, `net_dns` (strings a.b.c.d)
+- `net_mac` (string "02:FD:00:00:00:01")
+
+Notas:
+- Si se modifica broker/deviceId/backend/red -> `reboot_required:true` (no reinicio automático).
+- No se escribe en EEPROM legacy 0..1023; todo persiste vía registry TLV.
+
+
 ## Reglas de trabajo (acordadas)
 - **Commits cortos y frecuentes**: cada paso cerrado (A9.x / Bx.y) → commit + actualización de este archivo.
 - **Sin parches sueltos**: cuando se toca un archivo, se pega el fichero completo para evitar errores.
