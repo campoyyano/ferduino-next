@@ -1,5 +1,21 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.7 — Info retained + telemetría mínima (uptime)
+
+Se añade publicación de “birth certificate” y heartbeat:
+
+- `ferduino/<deviceId>/info` (retained)
+  - fw, build, board, backend, boot/mcusr, mac, ip/gw/subnet/dns, link
+
+- `ferduino/<deviceId>/telemetry/uptime` (no retained)
+  - cada 30s publica `{"ms":<millis>}`
+
+Integración:
+- En `app::runtime::loop()`, al flanco MQTT connected:
+  - `publishStatusRetained()`
+  - `publishInfoRetained()`
+- En cada loop: `telemetryLoop(30)`
+
 ## B5.6 — MQTT LWT (Last Will) para offline retained
 
 Se amplía la HAL MQTT para soportar LWT (Last Will & Testament) mediante `MqttConfig`:

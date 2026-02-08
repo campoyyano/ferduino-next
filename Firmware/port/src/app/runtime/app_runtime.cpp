@@ -9,6 +9,8 @@
 #include "app/nvm/eeprom_migration.h"
 
 #include "app/runtime/app_status.h"
+#include "app/runtime/app_info.h"
+#include "app/runtime/app_telemetry.h"
 
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
@@ -37,21 +39,17 @@ void begin() {
   if (g_started) return;
   g_started = true;
 
-  Serial.println("=== ferduino-next runtime (B5.4/B5.5) ===");
+  Serial.println("=== ferduino-next runtime (B5.4..B5.7) ===");
 
-  // 1) NVM registry + migración
   (void)app::nvm::registry().begin();
   (void)app::nvm::migrateLegacyIfNeeded();
 
-  // 2) Config
   (void)app::cfg::loadOrDefault();
 
-  // 3) Network
   const auto& cfg = app::cfg::get();
   const hal::NetworkConfig net = toHalNetCfg(cfg.net);
   (void)hal::network().begin(net);
 
-  // 4) Comms backend (HA/LEGACY) + MQTT init/callbacks
   app::comms().begin();
 
   g_prevMqttConnected = false;
@@ -60,19 +58,19 @@ void begin() {
 void loop() {
   if (!g_started) begin();
 
-  // Mantener stacks (los backends también llaman a network/mqtt loop,
-  // pero aquí no rompe: network.loop() es no-op portable).
   hal::network().loop();
-
-  // El backend es el que suele llevar la reconexión MQTT.
   app::comms().loop();
 
   const bool nowConn = hal::mqtt().connected();
   if (nowConn && !g_prevMqttConnected) {
-    // Flanco de conexión: publicar status retained
+    // Flanco de conexión: retained status + retained info
     app::runtime::publishStatusRetained();
+    app::runtime::publishInfoRetained();
   }
   g_prevMqttConnected = nowConn;
+
+  // Telemetría mínima (cada 30s)
+  app::runtime::telemetryLoop(30);
 }
 
 } // namespace app::runtime
