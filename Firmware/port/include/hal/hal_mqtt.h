@@ -19,6 +19,13 @@ struct MqttConfig {
 
   uint16_t keepAliveSec = 30;
   bool cleanSession = true;
+
+  // LWT (Last Will & Testament)
+  // Si willTopic == nullptr, la implementación puede autogenerar uno por defecto.
+  const char* willTopic = nullptr;      // e.g. "ferduino/<deviceId>/status"
+  const char* willPayload = nullptr;    // e.g. "{\"online\":0}"
+  uint8_t willQos = 0;
+  bool willRetained = true;
 };
 
 enum class MqttError : uint8_t {

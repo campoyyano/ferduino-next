@@ -1,5 +1,20 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.6 — MQTT LWT (Last Will) para offline retained
+
+Se amplía la HAL MQTT para soportar LWT (Last Will & Testament) mediante `MqttConfig`:
+- `willTopic`, `willPayload`, `willQos`, `willRetained`.
+
+Implementación en `hal_mqtt_pubsubclient.cpp`:
+- Si el caller NO configura will (willTopic null/vacío), el HAL autogenera:
+  - Topic: `ferduino/<clientId>/status`
+  - Payload: `{"online":0}`
+  - retained=true, qos=0
+
+Objetivo:
+- Si la placa pierde alimentación o se cuelga, el broker marca offline automáticamente sin intervención del firmware.
+
+
 ## B5.5 — Status retained + boot reason (runtime)
 
 Se publica un estado retained al conectar MQTT (flanco desconectado->conectado) sin tocar backends.

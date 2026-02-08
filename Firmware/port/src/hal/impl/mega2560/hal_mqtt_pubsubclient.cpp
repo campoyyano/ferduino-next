@@ -9,100 +9,71 @@
 namespace hal {
 
 /*
- * Wrapper: adapta ITcpClient a Arduino Client (requerido por PubSubClient)
- * Incluye implementación segura de peek()
+ * Wrapper: adapta ITcpClient a Arduino Client (requerido por PubSubClient).
+ * Nota: este wrapper no hace buffering; PubSubClient ya gestiona su propio buffer.
  */
 class TcpClientAsArduinoClient final : public Client {
 public:
-  explicit TcpClientAsArduinoClient(ITcpClient& tcp)
-    : _tcp(tcp) {}
-
-  int connect(const char* host, uint16_t port) override {
-    return _tcp.connect(host, port) ? 1 : 0;
-  }
+  explicit TcpClientAsArduinoClient(ITcpClient& c) : _c(c) {}
 
   int connect(IPAddress ip, uint16_t port) override {
-    (void)ip;
-    (void)port;
-    return 0; // no usado
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+    return _c.connect(buf, port) ? 1 : 0;
+  }
+
+  int connect(const char* host, uint16_t port) override {
+    return _c.connect(host, port) ? 1 : 0;
   }
 
   size_t write(uint8_t b) override {
-    return _tcp.write(&b, 1);
+    return _c.write(&b, 1);
   }
 
   size_t write(const uint8_t* buf, size_t size) override {
-    return _tcp.write(buf, size);
+    return _c.write(buf, size);
   }
 
   int available() override {
-    return _tcp.available();
-  }
-
-  int peek() override {
-    if (_hasPeek) return _peekByte;
-    if (_tcp.available() <= 0) return -1;
-
-    const int c = _tcp.read();
-    if (c < 0) return -1;
-
-    _peekByte = c;
-    _hasPeek = true;
-    return _peekByte;
+    return _c.available();
   }
 
   int read() override {
-    if (_hasPeek) {
-      _hasPeek = false;
-      return _peekByte;
-    }
-    return _tcp.read();
+    return _c.read();
   }
 
   int read(uint8_t* buf, size_t size) override {
-    if (!buf || size == 0) return 0;
+    return _c.read(buf, size);
+  }
 
-    size_t n = 0;
-    if (_hasPeek) {
-      buf[0] = (uint8_t)_peekByte;
-      _hasPeek = false;
-      n = 1;
-      if (size == 1) return 1;
-    }
-
-    const int r = _tcp.read(buf + n, size - n);
-    return (r < 0) ? (int)n : (int)(n + (size_t)r);
+  int peek() override {
+    // No implementamos peek (si una versión de PubSubClient lo exige, se ajusta).
+    return -1;
   }
 
   void flush() override {
-    _tcp.flush();
+    _c.flush();
   }
 
   void stop() override {
-    _tcp.stop();
+    _c.stop();
   }
 
   uint8_t connected() override {
-    return _tcp.connected() ? 1 : 0;
+    return _c.connected() ? 1 : 0;
   }
 
-  operator bool() override {
-    return connected();
-  }
+  operator bool() override { return true; }
 
 private:
-  ITcpClient& _tcp;
-  bool _hasPeek = false;
-  int  _peekByte = -1;
+  ITcpClient& _c;
 };
 
-// Callback global (PubSubClient lo exige así)
 static MqttMessageCb g_userCb = nullptr;
 
 static void pubsubCallback(char* topic, uint8_t* payload, unsigned int length) {
-  if (g_userCb) {
-    g_userCb(topic, payload, (size_t)length);
-  }
+  if (!g_userCb) return;
+  g_userCb(topic, payload, (size_t)length);
 }
 
 class MqttHalPubSubClient final : public IMqttHal {
@@ -124,11 +95,52 @@ public:
     if (!_initialized) return MqttError::NotInitialized;
     if (!network().isInitialized()) return MqttError::NetworkNotReady;
 
+    // --- B5.6: LWT autogenerado si no viene configurado ---
+    const char* willTopic = _cfg.willTopic;
+    const char* willPayload = _cfg.willPayload;
+    uint8_t willQos = _cfg.willQos;
+    bool willRetained = _cfg.willRetained;
+
+    if (!willTopic || willTopic[0] == '\0') {
+      // Default: ferduino/<clientId>/status  retained  {"online":0}
+      snprintf(_autoWillTopic, sizeof(_autoWillTopic),
+               "ferduino/%s/status", _cfg.clientId);
+      strncpy(_autoWillPayload, "{\"online\":0}", sizeof(_autoWillPayload));
+      _autoWillPayload[sizeof(_autoWillPayload) - 1] = '\0';
+
+      willTopic = _autoWillTopic;
+      willPayload = _autoWillPayload;
+      willQos = 0;
+      willRetained = true;
+    }
+    if (!willPayload) {
+      // payload mínimo si el topic existe pero no hay payload
+      strncpy(_autoWillPayload, "{\"online\":0}", sizeof(_autoWillPayload));
+      _autoWillPayload[sizeof(_autoWillPayload) - 1] = '\0';
+      willPayload = _autoWillPayload;
+    }
+
     bool ok = false;
-    if (_cfg.user && _cfg.pass) {
-      ok = _ps.connect(_cfg.clientId, _cfg.user, _cfg.pass);
+
+    const bool useAuth = (_cfg.user && _cfg.user[0] != '\0' &&
+                          _cfg.pass && _cfg.pass[0] != '\0');
+
+    const bool useWill = (willTopic && willTopic[0] != '\0');
+
+    if (useWill) {
+      if (useAuth) {
+        ok = _ps.connect(_cfg.clientId, _cfg.user, _cfg.pass,
+                         willTopic, willQos, willRetained, willPayload);
+      } else {
+        ok = _ps.connect(_cfg.clientId,
+                         willTopic, willQos, willRetained, willPayload);
+      }
     } else {
-      ok = _ps.connect(_cfg.clientId);
+      if (useAuth) {
+        ok = _ps.connect(_cfg.clientId, _cfg.user, _cfg.pass);
+      } else {
+        ok = _ps.connect(_cfg.clientId);
+      }
     }
 
     return ok ? MqttError::Ok : MqttError::ConnectFailed;
@@ -140,9 +152,8 @@ public:
   }
 
   bool connected() const override {
-  return const_cast<PubSubClient&>(_ps).connected();
-}
-
+    return const_cast<PubSubClient&>(_ps).connected();
+  }
 
   void loop() override {
     _ps.loop();
@@ -176,6 +187,10 @@ private:
   bool _initialized = false;
   MqttConfig _cfg{};
 
+  // LWT por defecto (B5.6)
+  char _autoWillTopic[96] = {0};
+  char _autoWillPayload[32] = {0};
+
   // El wrapper se construye UNA vez con el TCP de la HAL de red
   TcpClientAsArduinoClient _client{ network().tcp() };
   PubSubClient _ps{ _client };
@@ -189,5 +204,4 @@ IMqttHal& mqtt() {
 
 } // namespace hal
 
-#endif
-
+#endif // AVR
