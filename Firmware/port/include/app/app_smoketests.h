@@ -1,10 +1,5 @@
 #pragma once
 
-// IDs numéricos para seleccionar con build_flags:
-//  -D SMOKETEST=SMOKETEST_NONE  (runtime normal)
-//  -D SMOKETEST=SMOKETEST_GPIO
-//  -D SMOKETEST=SMOKETEST_MQTT
-// etc.
 #define SMOKETEST_NONE          0
 #define SMOKETEST_GPIO          1
 #define SMOKETEST_FERDUINO_PINS 2

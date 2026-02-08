@@ -1,5 +1,25 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B5.5 — Status retained + boot reason (runtime)
+
+Se publica un estado retained al conectar MQTT (flanco desconectado->conectado) sin tocar backends.
+
+- Topic: `ferduino/<deviceId>/status` (retained)
+- Payload JSON:
+  - `online` (1)
+  - `backend` ("HA" / "LEGACY")
+  - `boot` (power_on/external/brown_out/watchdog/jtag/unknown)
+  - `mcusr` (valor bruto capturado en AVR)
+  - `fw` (FERDUINO_FW_VERSION o "dev")
+  - `build` (__DATE__ __TIME__)
+  - `ip` (IPv4)
+
+Implementación:
+- Nuevo: `app/runtime/app_boot_reason.{h,cpp}` (captura MCUSR temprana)
+- Nuevo: `app/runtime/app_status.{h,cpp}` (builder + publish retained)
+- Runtime (`app/runtime/app_runtime.cpp`) detecta flanco `hal::mqtt().connected()` y publica status.
+
+
 ## B5.4 — Runtime skeleton (sin smoketests) + arranque mínimo real
 
 Se introduce modo `SMOKETEST_NONE` para ejecutar un flujo runtime mínimo en vez de smoketests:

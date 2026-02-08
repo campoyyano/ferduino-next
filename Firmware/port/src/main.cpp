@@ -5,10 +5,6 @@
 
 #include "app/runtime/app_runtime.h"
 
-#include "app/nvm/eeprom_registry.h"
-#include "app/nvm/eeprom_migration.h"
-#include "app/config/app_config.h"
-
 void setup() {
   Serial.begin(115200);
 
@@ -16,11 +12,7 @@ void setup() {
   Serial.print("Perfil de pines: ");
   Serial.println(PINS_PROFILE);
 
-  // En runtime real, dejamos el init en app::runtime::begin().
-  // En smoketests, seguimos inicializando como hasta ahora (mínimo).
-  (void)app::nvm::registry().begin();
-  (void)app::nvm::migrateLegacyIfNeeded();
-  (void)app::cfg::loadOrDefault();
+  // En runtime, begin() se llama desde loop si procede.
 }
 
 void loop() {
@@ -55,7 +47,6 @@ void loop() {
   app_mqtt_smoketest();
 
 #else
-  // Default: runtime
   app::runtime::loop();
 #endif
 }

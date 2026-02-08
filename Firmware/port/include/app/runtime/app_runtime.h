@@ -2,15 +2,13 @@
 
 namespace app::runtime {
 
-// Arranque “mínimo real” (sin portar todavía módulos grandes):
-// - NVM registry begin
-// - migración legacy->registry si aplica
-// - loadOrDefault config
+// Arranque mínimo real:
+// - cfg load
 // - network begin
-// - comms begin (mqtt + callbacks)
+// - comms begin
 void begin();
 
-// Loop runtime mínimo: network.loop + comms.loop
+// Loop runtime mínimo (mantener stacks + status)
 void loop();
 
 } // namespace app::runtime
