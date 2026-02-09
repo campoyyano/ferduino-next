@@ -3,8 +3,8 @@
 #include "app/config/app_config.h"
 #include "app/config/app_config_mqtt_admin.h"
 
-#include "app/comms/ha/ha_outlet_control.h"
 #include "app/comms/ha/ha_discovery.h"
+#include "app/outlets/app_outlets.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -41,77 +41,43 @@ public:
     for (int i = 1; i <= 9; i++) {
       snprintf(_cmdOutletTopic[i], sizeof(_cmdOutletTopic[i]),
                "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
+      (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
     }
 
-    snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic),
-             "%s/%s/cmd/config", BASE_TOPIC, deviceId);
+    // Config admin topic
+    snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic), "%s/%s/cmd/config", BASE_TOPIC, deviceId);
+    (void)hal::mqtt().subscribe(_cmdCfgTopic);
 
-    _lastReconnectMs = 0;
-    _lastStateMs = 0;
-    _discoveryPublished = false;
+    // Discovery (retained)
+    if (!_discoveryPublished) {
+      app::ha::publishDiscoveryMinimal();
+      _discoveryPublished = true;
+    }
+
+    // Estado inicial
+    publishStatePlaceholder();
+    publishAvailability(true);
+
+    _lastReconnectMs = millis();
   }
 
   void loop() override {
-    hal::network().loop();
-    hal::mqtt().loop();
-
-    if (!hal::network().isInitialized()) {
-      return;
-    }
-
-    if (!hal::mqtt().connected()) {
-      const uint32_t now = millis();
-      if (now - _lastReconnectMs < 2000) {
-        return;
-      }
-      _lastReconnectMs = now;
-
-      if (hal::mqtt().connect() == hal::MqttError::Ok) {
-        publishAvailability(true);
-
-        // Subscribe comandos outlets 1..9
-        for (int i = 1; i <= 9; i++) {
-          (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
-        }
-
-        // Subscribe admin config
-        (void)hal::mqtt().subscribe(_cmdCfgTopic);
-
-        // Discovery (una vez por arranque/conexión)
-        if (!_discoveryPublished) {
-          app::ha::publishDiscoveryMinimal();
-          _discoveryPublished = true;
-        }
-
-        publishStatePlaceholder();
-      }
-      return;
-    }
-
-    // refresco ligero de estado cada 5s (placeholder)
     const uint32_t now = millis();
+
+    // reconexión simple si MQTT cae
+    if (!hal::mqtt().connected()) {
+      if (now - _lastReconnectMs > 3000) {
+        _lastReconnectMs = now;
+        (void)hal::mqtt().reconnect();
+      }
+      return;
+    }
+
+    // publish periódico de estado (placeholder)
     if (now - _lastStateMs > 5000) {
       _lastStateMs = now;
       publishStatePlaceholder();
     }
-  }
-
-  bool connected() const override {
-    return hal::mqtt().connected();
-  }
-
-  bool publishStatus(const char* key, const char* value, bool retained=false) override {
-    if (!key || !value) return false;
-
-    char msg[180];
-    snprintf(msg, sizeof(msg), "{\"%s\":\"%s\"}", key, value);
-
-    return hal::mqtt().publish(
-      _stateTopic,
-      (const uint8_t*)msg,
-      strlen(msg),
-      retained
-    ) == hal::MqttError::Ok;
   }
 
   void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
@@ -119,8 +85,6 @@ public:
 
     // B3.4: admin config primero
     if (app::cfgadmin::handleConfigCommand(topic, payload, len)) {
-      // Si quieres, aquí podríamos marcar "reinit pending"
-      // pero por ahora solo respondemos ACK y seguimos.
       return;
     }
 
@@ -132,9 +96,9 @@ public:
     // Outlets 1..9
     for (int i = 1; i <= 9; i++) {
       if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
-        const uint8_t v = (_rx[0] == '1') ? 1 : 0;
-        app::ha::applyOutletCommand((uint8_t)i, v);
-        publishStatePlaceholder();
+        const bool on = (_rx[0] == '1');
+        app::outlets::set((uint8_t)(i - 1), on);
+        publishStatePlaceholder(); // refleja el cambio inmediatamente
         return;
       }
     }
@@ -210,15 +174,15 @@ private:
              led_rb,
              led_red,
              led_uv,
-             (int)app::ha::getOutletState(1),
-             (int)app::ha::getOutletState(2),
-             (int)app::ha::getOutletState(3),
-             (int)app::ha::getOutletState(4),
-             (int)app::ha::getOutletState(5),
-             (int)app::ha::getOutletState(6),
-             (int)app::ha::getOutletState(7),
-             (int)app::ha::getOutletState(8),
-             (int)app::ha::getOutletState(9),
+             (int)app::outlets::get(0),
+             (int)app::outlets::get(1),
+             (int)app::outlets::get(2),
+             (int)app::outlets::get(3),
+             (int)app::outlets::get(4),
+             (int)app::outlets::get(5),
+             (int)app::outlets::get(6),
+             (int)app::outlets::get(7),
+             (int)app::outlets::get(8),
              (unsigned long)(millis() / 1000UL));
 
     (void)hal::mqtt().publish(_stateTopic, (const uint8_t*)msg, strlen(msg), false);
@@ -237,10 +201,11 @@ private:
   char _cmdOutletTopic[10][96] = {{0}};
   char _cmdCfgTopic[96] = {0};
 
-  char _rx[32] = {0};
+  // rx buffer
+  char _rx[96] = {0};
 };
 
-ICommsBackend& comms_ha_singleton() {
+ICommsBackend& commsHABackend() {
   return CommsHABackend::instance();
 }
 

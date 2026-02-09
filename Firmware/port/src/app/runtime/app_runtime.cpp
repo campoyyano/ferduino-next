@@ -12,6 +12,8 @@
 #include "app/runtime/app_info.h"
 #include "app/runtime/app_telemetry.h"
 
+#include "app/outlets/app_outlets.h"
+
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
 
@@ -45,6 +47,9 @@ void begin() {
   (void)app::nvm::migrateLegacyIfNeeded();
 
   (void)app::cfg::loadOrDefault();
+
+  // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
+  app::outlets::begin();
 
   const auto& cfg = app::cfg::get();
   const hal::NetworkConfig net = toHalNetCfg(cfg.net);

@@ -1,5 +1,20 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B6.1a — Sensores (Temperatura) FAKE + telemetría debug
+
+- Se crea módulo `app/sensors` con tipos y API:
+  - `Temperatures { water/air, valid, ts_ms }`
+  - `begin()`, `loop()`, `last()`
+- Implementación FAKE (sin hardware) en `src/app/sensors/sensors.cpp`:
+  - water ~25.1°C y air ~24.7°C con variación lenta determinista.
+- Se añade telemetría MQTT debug:
+  - Topic: `ferduino/<deviceId>/telemetry/temps` (no retained)
+  - Payload: JSON con x10 y flags de validez
+- Integración en `app/runtime/app_runtime.cpp`:
+  - `sensors::begin/loop`
+  - `publishTempsLoop(30)`
+
+
 ## Pre-B6 — Fixes audit Codex (consistencia y robustez)
 
 - SMOKETEST:

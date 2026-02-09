@@ -1,6 +1,6 @@
 #include "app/comms/ha/ha_legacy_bridge.h"
 
-#include "app/comms/ha/ha_outlet_control.h"
+#include "app/outlets/app_outlets.h"
 #include "hal/hal_mqtt.h"
 
 #include <Arduino.h>
@@ -30,82 +30,58 @@ static bool findValuePtr(const char* json, const char* key, const char** outPtr)
   // Buscar ':' después de la key
   p = strchr(p, ':');
   if (!p) return false;
-  p++; // después de ':'
+  p++;
 
-  // saltar espacios
-  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+  // Saltar espacios
+  while (*p == ' ' || *p == '\t') p++;
 
   *outPtr = p;
   return true;
 }
 
-static bool parseFloatKey(const char* json, const char* key, float& out) {
+static float getFloatOr(const char* json, const char* key, float def) {
   const char* p = nullptr;
-  if (!findValuePtr(json, key, &p)) return false;
-
-  out = (float)atof(p);
-  return true;
+  if (!findValuePtr(json, key, &p)) return def;
+  return (float)atof(p);
 }
 
-static bool parseIntKey(const char* json, const char* key, int& out) {
+static int getIntOr(const char* json, const char* key, int def) {
   const char* p = nullptr;
-  if (!findValuePtr(json, key, &p)) return false;
-
-  out = atoi(p);
-  return true;
+  if (!findValuePtr(json, key, &p)) return def;
+  return atoi(p);
 }
 
-static void publishHaState(const char* payload) {
-  if (!payload) return;
-
+static void publishHaState(const char* msg) {
   char topic[96];
   snprintf(topic, sizeof(topic), "%s/%s/state", BASE_TOPIC, FERDUINO_DEVICE_ID);
-
-  (void)hal::mqtt().publish(topic, (const uint8_t*)payload, strlen(payload), false);
+  (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
 }
 
-void bridgeFromLegacyHomeJson(const char* legacyJson) {
+void publishHaStateFromLegacyHomeJson(const char* legacyJson) {
   if (!legacyJson) return;
 
-  // Defaults (si falta key, queda 0)
-  float twater=0, theatsink=0, tamb=0;
-  float waterph=0, reactorph=0, orp=0, dens=0;
+  // Parse values (legacy keys)
+  const float twater    = getFloatOr(legacyJson, "tempA", 0.0f);
+  const float theatsink = getFloatOr(legacyJson, "tempH", 0.0f);
+  const float tamb      = getFloatOr(legacyJson, "tempC", 0.0f);
 
-  int wLedW=0, bLedW=0, rbLedW=0, redLedW=0, uvLedW=0;
-  int running=0;
+  const float waterph   = getFloatOr(legacyJson, "phA", 0.0f);
+  const float reactorph = getFloatOr(legacyJson, "phR", 0.0f);
+  const float orp       = getFloatOr(legacyJson, "orp", 0.0f);
+  const float dens      = getFloatOr(legacyJson, "dens", 0.0f);
 
-  (void)parseFloatKey(legacyJson, "twater", twater);
-  (void)parseFloatKey(legacyJson, "theatsink", theatsink);
-  (void)parseFloatKey(legacyJson, "tamb", tamb);
+  const int wLedW   = getIntOr(legacyJson, "ledW", 0);
+  const int bLedW   = getIntOr(legacyJson, "ledB", 0);
+  const int rbLedW  = getIntOr(legacyJson, "ledRB", 0);
+  const int redLedW = getIntOr(legacyJson, "ledR", 0);
+  const int uvLedW  = getIntOr(legacyJson, "ledUV", 0);
 
-  (void)parseFloatKey(legacyJson, "waterph", waterph);
-  (void)parseFloatKey(legacyJson, "reactorph", reactorph);
-  (void)parseFloatKey(legacyJson, "orp", orp);
-  (void)parseFloatKey(legacyJson, "dens", dens);
+  const int running = getIntOr(legacyJson, "uptime", 0);
 
-  (void)parseIntKey(legacyJson, "wLedW", wLedW);
-  (void)parseIntKey(legacyJson, "bLedW", bLedW);
-  (void)parseIntKey(legacyJson, "rbLedW", rbLedW);
-  (void)parseIntKey(legacyJson, "redLedW", redLedW);
-  (void)parseIntKey(legacyJson, "uvLedW", uvLedW);
-
-  (void)parseIntKey(legacyJson, "running", running);
-
-  // Outlets: leemos legacy (fallback) y luego preferimos el estado HA (B2.3)
-  int outlet[10] = {0}; // 1..9
-  (void)parseIntKey(legacyJson, "outlet1", outlet[1]);
-  (void)parseIntKey(legacyJson, "outlet2", outlet[2]);
-  (void)parseIntKey(legacyJson, "outlet3", outlet[3]);
-  (void)parseIntKey(legacyJson, "outlet4", outlet[4]);
-  (void)parseIntKey(legacyJson, "outlet5", outlet[5]);
-  (void)parseIntKey(legacyJson, "outlet6", outlet[6]);
-  (void)parseIntKey(legacyJson, "outlet7", outlet[7]);
-  (void)parseIntKey(legacyJson, "outlet8", outlet[8]);
-  (void)parseIntKey(legacyJson, "outlet9", outlet[9]);
-
-  // Preferir HA state (simulado o real) sobre legacy para reflejar comandos HA
+  // Preferimos outlets desde el motor HA (RAM + registry) para reflejar comandos HA
+  int outlet[10] = {0};
   for (int i = 1; i <= 9; i++) {
-    outlet[i] = (int)app::ha::getOutletState((uint8_t)i);
+    outlet[i] = app::outlets::get((uint8_t)(i - 1)) ? 1 : 0;
   }
 
   // Construir HA state JSON (snake_case)
