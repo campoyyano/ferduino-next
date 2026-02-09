@@ -10,7 +10,7 @@ namespace hal {
 
 /*
  * Wrapper: adapta ITcpClient a Arduino Client (requerido por PubSubClient).
- * Nota: este wrapper no hace buffering; PubSubClient ya gestiona su propio buffer.
+ * Implementa peek() con cache de 1 byte para compatibilidad.
  */
 class TcpClientAsArduinoClient final : public Client {
 public:
@@ -35,20 +35,45 @@ public:
   }
 
   int available() override {
-    return _c.available();
+    const int a = _c.available();
+    return _peekValid ? (a + 1) : a;
   }
 
   int read() override {
+    if (_peekValid) {
+      _peekValid = false;
+      return (int)_peekByte;
+    }
     return _c.read();
   }
 
   int read(uint8_t* buf, size_t size) override {
+    if (!buf || size == 0) return 0;
+
+    if (_peekValid) {
+      buf[0] = _peekByte;
+      _peekValid = false;
+      if (size == 1) return 1;
+
+      const int r = _c.read(buf + 1, size - 1);
+      if (r < 0) return 1;
+      return r + 1;
+    }
+
     return _c.read(buf, size);
   }
 
   int peek() override {
-    // No implementamos peek (si una versión de PubSubClient lo exige, se ajusta).
-    return -1;
+    if (_peekValid) return (int)_peekByte;
+
+    if (_c.available() <= 0) return -1;
+
+    const int v = _c.read();
+    if (v < 0) return -1;
+
+    _peekByte = (uint8_t)v;
+    _peekValid = true;
+    return v;
   }
 
   void flush() override {
@@ -67,6 +92,8 @@ public:
 
 private:
   ITcpClient& _c;
+  bool _peekValid = false;
+  uint8_t _peekByte = 0;
 };
 
 static MqttMessageCb g_userCb = nullptr;
@@ -95,7 +122,7 @@ public:
     if (!_initialized) return MqttError::NotInitialized;
     if (!network().isInitialized()) return MqttError::NetworkNotReady;
 
-    // --- B5.6: LWT autogenerado si no viene configurado ---
+    // --- LWT autogenerado si no viene configurado ---
     const char* willTopic = _cfg.willTopic;
     const char* willPayload = _cfg.willPayload;
     uint8_t willQos = _cfg.willQos;
@@ -114,7 +141,6 @@ public:
       willRetained = true;
     }
     if (!willPayload) {
-      // payload mínimo si el topic existe pero no hay payload
       strncpy(_autoWillPayload, "{\"online\":0}", sizeof(_autoWillPayload));
       _autoWillPayload[sizeof(_autoWillPayload) - 1] = '\0';
       willPayload = _autoWillPayload;
@@ -146,36 +172,43 @@ public:
     return ok ? MqttError::Ok : MqttError::ConnectFailed;
   }
 
-  void disconnect() override {
-    _ps.disconnect();
-    network().tcp().stop();
+  void loop() override {
+    if (!_initialized) return;
+
+    if (!_tcpWrapped) {
+      _tcpWrapped = true;
+      _tcpClient = &network().tcp();
+      _clientWrapper = new TcpClientAsArduinoClient(*_tcpClient);
+      _ps.setClient(*_clientWrapper);
+    }
+
+    (void)_ps.loop();
   }
 
   bool connected() const override {
+    // PubSubClient::connected() no es const -> cast seguro (no muta estado observable)
     return const_cast<PubSubClient&>(_ps).connected();
   }
 
-  void loop() override {
-    _ps.loop();
+  void disconnect() override {
+    if (!_initialized) return;
+    _ps.disconnect();
   }
 
-  MqttError publish(const char* topic,
-                    const uint8_t* payload,
-                    size_t len,
-                    bool retained = false) override {
-    if (!topic || (!payload && len > 0)) return MqttError::InvalidConfig;
-    if (!_ps.connected()) return MqttError::ConnectFailed;
+  MqttError publish(const char* topic, const uint8_t* payload, size_t len, bool retained) override {
+    if (!_initialized) return MqttError::NotInitialized;
+    if (!topic || topic[0] == '\0') return MqttError::InvalidConfig;
+    if (!payload || len == 0) return MqttError::InvalidConfig;
 
     const bool ok = _ps.publish(topic, payload, (unsigned int)len, retained);
     return ok ? MqttError::Ok : MqttError::PublishFailed;
   }
 
   MqttError subscribe(const char* topic, uint8_t qos = 0) override {
-    (void)qos;
-    if (!topic) return MqttError::InvalidConfig;
-    if (!_ps.connected()) return MqttError::ConnectFailed;
+    if (!_initialized) return MqttError::NotInitialized;
+    if (!topic || topic[0] == '\0') return MqttError::InvalidConfig;
 
-    const bool ok = _ps.subscribe(topic);
+    const bool ok = _ps.subscribe(topic, qos);
     return ok ? MqttError::Ok : MqttError::SubscribeFailed;
   }
 
@@ -184,24 +217,24 @@ public:
   }
 
 private:
-  bool _initialized = false;
   MqttConfig _cfg{};
+  bool _initialized = false;
 
-  // LWT por defecto (B5.6)
+  PubSubClient _ps;
+
+  bool _tcpWrapped = false;
+  ITcpClient* _tcpClient = nullptr;
+  TcpClientAsArduinoClient* _clientWrapper = nullptr;
+
   char _autoWillTopic[96] = {0};
   char _autoWillPayload[32] = {0};
-
-  // El wrapper se construye UNA vez con el TCP de la HAL de red
-  TcpClientAsArduinoClient _client{ network().tcp() };
-  PubSubClient _ps{ _client };
 };
 
-static MqttHalPubSubClient g_mqtt;
-
 IMqttHal& mqtt() {
-  return g_mqtt;
+  static MqttHalPubSubClient s;
+  return s;
 }
 
 } // namespace hal
 
-#endif // AVR
+#endif // MEGA2560 / AVR

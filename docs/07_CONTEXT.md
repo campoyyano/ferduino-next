@@ -1,5 +1,45 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+
+## B6.3b — Fix HAL MQTT (IMqttHal contract) + peek() safe wrapper
+
+- Se corrige `hal_mqtt_pubsubclient.cpp` para cumplir el contrato de `IMqttHal`:
+  - `disconnect()` ahora devuelve `void` (antes devolvía `MqttError`).
+  - `subscribe()` ahora implementa firma `subscribe(const char* topic, uint8_t qos)`.
+
+- Se mantiene la mejora de auditoría:
+  - `TcpClientAsArduinoClient::peek()` implementado con cache de 1 byte.
+  - `read()` y `read(buf,len)` consumen primero el byte cacheado si existe.
+
+- Se corrige la const-correctness:
+  - `connected() const` llama a `PubSubClient::connected()` mediante `const_cast` (ya que la librería no lo declara `const`).
+```markdown
+
+## B6.3a — Aplicación de mejoras de auditoría (robustez + coherencia)
+
+- MQTT wrapper (PubSubClient):
+  - Se implementa `peek()` en `TcpClientAsArduinoClient` con cache de 1 byte.
+  - `read()` y `read(buf,len)` consumen primero el byte cacheado si existe.
+  - Evita incompatibilidades futuras si la librería MQTT usa `peek()`.
+
+- Backend legacy:
+  - Se amplían buffers de topics de `64` a `128` (`_subTopic/_pubTopic`) para evitar truncado con username/apikey largos.
+  - `makeTopic()` detecta truncado de `snprintf`:
+    - En truncado, deja topic vacío y loggea error.
+  - En `loop()`, solo se hace `subscribe()` si el topic no está vacío (evita subscribes inválidos).
+
+- Runtime:
+  - Se añade logging mínimo por etapa en `runtime::begin()` sin cambiar comportamiento:
+    - fallo de `registry().begin()`
+    - fallo/skip de migración legacy->registry
+    - fallo de `cfg::loadOrDefault()`
+    - fallo de `network().begin()` (log de `NetError`)
+
+- Documentación NVM:
+  - Se actualiza `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md` para reflejar estado real:
+    - Outlets `310..319` y dosing `500..585` figuran como “Migrado ya” (coherente con `eeprom_migration.cpp`).
+
+
 ## B6.2b — Fix build: evitar doble definición runtime (app_runtime_old)
 
 - Se detecta fallo de link por doble definición:
