@@ -1,0 +1,146 @@
+# Ferduino HAL Migration — Hoja de Ruta
+
+## Objetivo general
+
+Migrar Ferduino a una arquitectura desacoplada por HAL, capaz de funcionar en:
+
+- Modo FAKE (sin hardware)
+- Modo REAL (hardware)
+- Sin rediseños, solo activando flags o backends
+
+
+# Fase A — Infraestructura base (COMPLETA)
+
+Objetivo: Port funcional en PlatformIO.
+
+Incluye:
+
+- PlatformIO Mega2560
+- HAL base:
+  - network
+  - mqtt
+  - rtc
+  - relay
+  - storage
+- MQTT operativo
+- Backend Home Assistant básico
+- Topics:
+  - state
+  - availability
+
+Estado: ✔ COMPLETA
+
+
+# Fase B — Capa App desacoplada (FAKE)
+
+## B4 — Persistencia (Registry TLV) ✔
+
+Infraestructura:
+
+- EepromRegistry (TLV)
+- Migración legacy
+- Flags de migración
+
+Keys actuales:
+
+- 100–102: temperatura agua
+- 310–319: outlets
+- 500–585: dosificación
+
+Documentación:
+- AUDIT_SUMMARY_B_G.md
+
+
+## B5 — Comunicaciones y Home Assistant ✔
+
+Componentes:
+
+- CommsHABackend
+- HA Discovery
+- Topics:
+
+  ferduino/<device>/state  
+  ferduino/<device>/availability  
+  ferduino/<device>/cmd/outlet/<n>
+
+Entidades:
+
+- Switch outlets
+- Sensores de reloj
+- LWT automático
+
+HAL MQTT corregido y estable.
+
+
+## B6 — Runtime funcional FAKE
+
+### B6.1 ✔
+- Sensores FAKE (temperatura)
+- Telemetría MQTT
+- Outlets runtime + persistencia
+
+### B6.2 ✔
+- Scheduler FAKE basado en millis()
+- Hook preparado para RTC
+- Flag:
+  APP_SCHEDULER_USE_RTC
+
+### B6.3 ✔ (en cierre)
+Auditoría de arquitectura:
+
+- Normalización FAKE/REAL
+- Flags por módulo:
+  - APP_SCHEDULER_USE_RTC
+  - APP_OUTLETS_USE_RELAY_HAL
+- Correcciones HAL MQTT
+- Wrapper TCP seguro (peek)
+- Limpieza runtime
+- Documentación completa
+
+
+# Estado actual del proyecto
+
+Fase A: ✔  
+Fase B4: ✔  
+Fase B5: ✔  
+Fase B6: ✔ (estable)
+
+Arquitectura base finalizada.
+
+
+# Fase C — Lógica funcional (siguiente)
+
+Objetivo: comportamiento real del acuario.
+
+Orden recomendado:
+
+## C1 — Scheduler de eventos
+- Encendido/apagado por hora
+- Base para automatizaciones
+
+## C2 — Control automático de outlets
+
+## C3 — Dosificación automática
+
+## C4 — Iluminación programada
+
+## C5 — Configuración dinámica vía HA/MQTT
+
+
+# Flags actuales
+
+Definidos en platformio.ini:
+
+- APP_SCHEDULER_USE_RTC
+- APP_OUTLETS_USE_RELAY_HAL
+
+Filosofía:
+
+APP_<MODULE>_USE_<BACKEND>=0/1
+
+
+# Riesgo arquitectónico actual
+
+Bajo.
+
+El sistema puede migrar a hardware real sin rediseño.
