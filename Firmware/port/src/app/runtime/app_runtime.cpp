@@ -11,9 +11,11 @@
 #include "app/runtime/app_status.h"
 #include "app/runtime/app_info.h"
 #include "app/runtime/app_telemetry.h"
+#include "app/runtime/app_sensors_telemetry.h"
 
 #include "app/outlets/app_outlets.h"
 #include "app/scheduler/app_scheduler.h"
+#include "app/sensors/sensors.h"
 
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
@@ -42,7 +44,7 @@ void begin() {
   if (g_started) return;
   g_started = true;
 
-  Serial.println("=== ferduino-next runtime (B5.4..B5.7) ===");
+  Serial.println("=== ferduino-next runtime (B6.x: outlets + scheduler + sensors fake) ===");
 
   (void)app::nvm::registry().begin();
   (void)app::nvm::migrateLegacyIfNeeded();
@@ -52,7 +54,7 @@ void begin() {
   // B6.2a: Scheduler base (FAKE millis por defecto; RTC por flag+hook)
   app::scheduler::begin();
 
-  // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
+  // B6.1b: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
   app::outlets::begin();
 
   const auto& cfg = app::cfg::get();
@@ -60,6 +62,9 @@ void begin() {
   (void)hal::network().begin(net);
 
   app::comms().begin();
+
+  // B6.1a: Sensores (fake por ahora)
+  app::sensors::begin();
 
   g_prevMqttConnected = false;
 }
@@ -73,6 +78,9 @@ void loop() {
   hal::network().loop();
   app::comms().loop();
 
+  // B6.1a: mantener sensores actualizados
+  app::sensors::loop();
+
   const bool nowConn = hal::mqtt().connected();
   if (nowConn && !g_prevMqttConnected) {
     // Flanco de conexión: retained status + retained info
@@ -81,8 +89,11 @@ void loop() {
   }
   g_prevMqttConnected = nowConn;
 
-  // Telemetría mínima (cada 30s)
+  // Telemetría base (cada 30s)
   app::runtime::telemetryLoop(30);
+
+  // Telemetría de temperaturas (debug) (cada 30s)
+  app::runtime::publishTempsLoop(30);
 }
 
 } // namespace app::runtime

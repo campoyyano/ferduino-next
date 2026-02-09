@@ -172,6 +172,11 @@ static void publishAllEntities() {
   // Uptime
   publishSensor(deviceId, "uptime", "Uptime", "uptime", "", "s", "{{ value_json.uptime }}");
 
+  // Scheduler / Clock (B6.2a)
+  publishSensor(deviceId, "clock_minute_of_day", "Clock Minute Of Day", "clock_minute_of_day", "", "min", "{{ value_json.clock_minute_of_day }}");
+  publishSensor(deviceId, "clock_source", "Clock Source", "clock_source", "", "", "{{ value_json.clock_source }}");
+  publishSensor(deviceId, "clock_tick", "Clock Minute Tick", "clock_tick", "", "", "{{ value_json.clock_tick }}");
+
   // Outlets como switch (B2.3)
   // command_topic: ferduino/<id>/cmd/outlet/N (payload "1"/"0")
   // state: value_json.outlet_N

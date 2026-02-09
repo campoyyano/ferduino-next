@@ -5,6 +5,7 @@
 
 #include "app/comms/ha/ha_discovery.h"
 #include "app/outlets/app_outlets.h"
+#include "app/scheduler/app_scheduler.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -143,6 +144,10 @@ public:
   }
 
 private:
+  static const char* sourceToStr(app::scheduler::TimeSource s) {
+    return (s == app::scheduler::TimeSource::Rtc) ? "rtc" : "millis";
+  }
+
   void publishAvailability(bool online) {
     const char* v = online ? "online" : "offline";
     (void)hal::mqtt().publish(_availTopic, (const uint8_t*)v, strlen(v), true);
@@ -165,7 +170,12 @@ private:
     const int led_red   = 0;
     const int led_uv    = 0;
 
-    char msg[640];
+    const app::scheduler::TimeHM t = app::scheduler::now();
+    const uint16_t mod = app::scheduler::minuteOfDay();
+    const uint8_t tick = app::scheduler::minuteTick() ? 1 : 0; // peek
+    const char* src = sourceToStr(app::scheduler::timeSource());
+
+    char msg[740];
     snprintf(msg, sizeof(msg),
              "{"
                "\"water_temperature\":%.2f,"
@@ -189,7 +199,12 @@ private:
                "\"outlet_7\":%d,"
                "\"outlet_8\":%d,"
                "\"outlet_9\":%d,"
-               "\"uptime\":%lu"
+               "\"uptime\":%lu,"
+               "\"clock_minute_of_day\":%u,"
+               "\"clock_hour\":%u,"
+               "\"clock_minute\":%u,"
+               "\"clock_tick\":%u,"
+               "\"clock_source\":\"%s\""
              "}",
              (double)water_temperature,
              (double)heatsink_temperature,
@@ -212,7 +227,12 @@ private:
              (int)app::outlets::get(6),
              (int)app::outlets::get(7),
              (int)app::outlets::get(8),
-             (unsigned long)(millis() / 1000UL));
+             (unsigned long)(millis() / 1000UL),
+             (unsigned)mod,
+             (unsigned)t.hour,
+             (unsigned)t.minute,
+             (unsigned)tick,
+             src);
 
     (void)hal::mqtt().publish(_stateTopic, (const uint8_t*)msg, strlen(msg), false);
   }
