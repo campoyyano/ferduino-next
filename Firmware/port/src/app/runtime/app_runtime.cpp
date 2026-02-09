@@ -14,6 +14,7 @@
 
 #include "app/outlets/app_outlets.h"
 #include "app/scheduler/app_scheduler.h"
+#include "app/scheduler/app_event_scheduler.h"
 
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
@@ -58,6 +59,9 @@ void begin() {
   // B6.2a: Scheduler base (FAKE millis por defecto; RTC por flag+hook)
   app::scheduler::begin();
 
+  // C1.1: Motor de eventos (ventanas ON/OFF) — solo calcula estado deseado
+  app::scheduler::events::begin();
+
   // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
   app::outlets::begin();
 
@@ -79,6 +83,9 @@ void loop() {
 
   // B6.2a: tick scheduler
   app::scheduler::loop();
+
+  // C1.1: tick motor de eventos (reacciona al cambio de minuto)
+  app::scheduler::events::loop();
 
   hal::network().loop();
   app::comms().loop();

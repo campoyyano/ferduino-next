@@ -6,6 +6,7 @@
 
 #include "app/config/app_config.h"
 #include "app/scheduler/app_scheduler.h"
+#include "app/scheduler/app_event_scheduler.h"
 #include "hal/hal_mqtt.h"
 
 namespace app::runtime {
@@ -69,6 +70,33 @@ void telemetryLoop(uint32_t intervalSec) {
              (unsigned)t.minute,
              (unsigned)tick,
              src);
+
+    (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
+  }
+
+  // --- event scheduler debug (C1.1, canal 0) ---
+  {
+    const uint8_t ch = 0;
+    const auto w = app::scheduler::events::window(ch);
+    const bool want = app::scheduler::events::desiredOn(ch);
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "ferduino/%s/telemetry/event_scheduler", deviceId);
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "{"
+               "\"ch\":%u,"
+               "\"enabled\":%u,"
+               "\"on\":%u,"
+               "\"off\":%u,"
+               "\"desired\":%u"
+             "}",
+             (unsigned)ch,
+             (unsigned)(w.enabled ? 1 : 0),
+             (unsigned)w.onMinute,
+             (unsigned)w.offMinute,
+             (unsigned)(want ? 1 : 0));
 
     (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
   }

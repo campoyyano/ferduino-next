@@ -1,5 +1,45 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## C1.1 — Scheduler de eventos (núcleo) + fix de compatibilidad con runtime/comms
+
+- Se corrige `app_scheduler.cpp` para que implemente exactamente la API declarada en `include/app/scheduler/app_scheduler.h`:
+  - `now()`, `minutesSinceBoot()`, `minuteTick()/consumeMinuteTick()`, `timeSource()`
+  - Se mantiene soporte RTC opcional vía hook `app_scheduler_rtc_minute_of_day()` y fallback a millis.
+
+- Se añade motor mínimo de eventos (Fase C1) sin hardware:
+  - Nuevo API: `include/app/scheduler/app_event_scheduler.h`
+  - Implementación: `src/app/scheduler/app_event_scheduler.cpp`
+  - 1 ventana ON/OFF por canal (9 canales), soporta cruce de medianoche.
+  - Evalúa solo en tick de minuto (`consumeMinuteTick()`), mantiene estado “desired” por canal.
+
+- Integración respetando arquitectura actual del port:
+  - `src/app/runtime/app_runtime.cpp` integra `events::begin()` y `events::loop()` sin tocar la gestión MQTT del backend (`app::comms()`).
+  - `src/app/runtime/app_telemetry.cpp` publica telemetría debug mínima:
+    - `ferduino/<deviceId>/telemetry/event_scheduler` (canal 0: enabled/on/off/desired).
+
+
+## C1.1 — Núcleo de scheduler de eventos (ventana ON/OFF) + fix API scheduler base
+
+- Se corrige el bloqueante pre-C: `app_scheduler` tenía API inconsistente entre header y `.cpp`.
+  - `src/app/scheduler/app_scheduler.cpp` ahora implementa lo declarado en `include/app/scheduler/app_scheduler.h`:
+    - `now()`, `minutesSinceBoot()`, `minuteTick()/consumeMinuteTick()`, `timeSource()`
+  - Esto desbloquea consumidores como `app_runtime/app_telemetry` y reduce riesgo de link/undefined refs.
+
+- Se añade motor mínimo de eventos (Fase C1) sin hardware:
+  - Nuevo API: `include/app/scheduler/app_event_scheduler.h`
+  - Implementación: `src/app/scheduler/app_event_scheduler.cpp`
+  - Modelo actual: 1 ventana ON/OFF por canal (9 canales), soporta cruce medianoche.
+  - El motor se evalúa únicamente en tick de minuto (`consumeMinuteTick()`), con estado “deseado” por canal.
+
+- Integración suave (sin controlar outlets todavía):
+  - `app_runtime.cpp`: `events::begin()` y `events::loop()`.
+  - `app_telemetry.cpp`: se publica telemetría debug mínima:
+    - `ferduino/<deviceId>/telemetry/event_scheduler` (canal 0: enabled/on/off/desired).
+
+Notas:
+- En C2 se conectará el estado “deseado” del motor a `app/outlets` en modo AUTO y se añadirá persistencia TLV de ventanas.
+
+
 ## B6.3c — Fix outlets registry API (bool/u32)
 
 - Se corrige `app/outlets` para usar la API real de `EepromRegistry`:
