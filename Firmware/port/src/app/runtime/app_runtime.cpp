@@ -13,6 +13,7 @@
 #include "app/runtime/app_telemetry.h"
 
 #include "app/outlets/app_outlets.h"
+#include "app/scheduler/app_scheduler.h"
 
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
@@ -48,6 +49,9 @@ void begin() {
 
   (void)app::cfg::loadOrDefault();
 
+  // B6.2a: Scheduler base (FAKE millis por defecto; RTC por flag+hook)
+  app::scheduler::begin();
+
   // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
   app::outlets::begin();
 
@@ -62,6 +66,9 @@ void begin() {
 
 void loop() {
   if (!g_started) begin();
+
+  // B6.2a: tick scheduler
+  app::scheduler::loop();
 
   hal::network().loop();
   app::comms().loop();

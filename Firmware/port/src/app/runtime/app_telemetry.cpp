@@ -5,11 +5,16 @@
 #include <string.h>
 
 #include "app/config/app_config.h"
+#include "app/scheduler/app_scheduler.h"
 #include "hal/hal_mqtt.h"
 
 namespace app::runtime {
 
 static uint32_t g_lastMs = 0;
+
+static const char* sourceToStr(app::scheduler::TimeSource s) {
+  return (s == app::scheduler::TimeSource::Rtc) ? "rtc" : "millis";
+}
 
 void telemetryLoop(uint32_t intervalSec) {
   if (!hal::mqtt().connected()) return;
@@ -24,13 +29,49 @@ void telemetryLoop(uint32_t intervalSec) {
   if (g_lastMs != 0 && (uint32_t)(now - g_lastMs) < intervalMs) return;
   g_lastMs = now;
 
-  char topic[128];
-  snprintf(topic, sizeof(topic), "ferduino/%s/telemetry/uptime", deviceId);
+  // --- uptime ---
+  {
+    char topic[128];
+    snprintf(topic, sizeof(topic), "ferduino/%s/telemetry/uptime", deviceId);
 
-  char msg[48];
-  snprintf(msg, sizeof(msg), "{\"ms\":%lu}", (unsigned long)now);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "{\"ms\":%lu}", (unsigned long)now);
 
-  (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
+    (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
+  }
+
+  // --- scheduler debug ---
+  {
+    const app::scheduler::TimeHM t = app::scheduler::now();
+    const uint16_t mod = app::scheduler::minuteOfDay();
+    const uint32_t minsBoot = app::scheduler::minutesSinceBoot();
+    const uint8_t tick = app::scheduler::minuteTick() ? 1 : 0; // peek (no consume)
+    const char* src = sourceToStr(app::scheduler::timeSource());
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "ferduino/%s/telemetry/scheduler", deviceId);
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "{"
+               "\"ms\":%lu,"
+               "\"mins_boot\":%lu,"
+               "\"min_of_day\":%u,"
+               "\"hour\":%u,"
+               "\"minute\":%u,"
+               "\"tick\":%u,"
+               "\"source\":\"%s\""
+             "}",
+             (unsigned long)now,
+             (unsigned long)minsBoot,
+             (unsigned)mod,
+             (unsigned)t.hour,
+             (unsigned)t.minute,
+             (unsigned)tick,
+             src);
+
+    (void)hal::mqtt().publish(topic, (const uint8_t*)msg, strlen(msg), false);
+  }
 }
 
 } // namespace app::runtime

@@ -1,5 +1,28 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B6.2a — Scheduler backend seleccionable (millis vs RTC) sin rediseño
+
+- Se introduce flag de compilación:
+  - `APP_SCHEDULER_USE_RTC` (default = 0)
+
+- `app/scheduler` mantiene API estable y ahora soporta backend RTC sin acoplarse a HAL:
+  - Si `APP_SCHEDULER_USE_RTC=1`, se intenta leer minuto del día desde un hook débil:
+    - `app_scheduler_rtc_minute_of_day()` -> devuelve `0..1439`
+  - Si el hook no existe o devuelve `0xFFFF`, fallback automático a `millis()`.
+
+- Tick de scheduler:
+  - `minuteTick()` se genera comparando cambios de `minuteOfDay()` (válido tanto para millis como para RTC).
+
+- Telemetría debug:
+  - `ferduino/<deviceId>/telemetry/scheduler` incluye campo:
+    - `"source": "millis" | "rtc"`
+  - Permite verificar el switchover sin cambiar lógica de app.
+
+- Cuando haya hardware:
+  - Activar `-D APP_SCHEDULER_USE_RTC=1`
+  - Implementar `app_scheduler_rtc_minute_of_day()` en HAL/RTC sin tocar el scheduler ni los módulos consumidores.
+
+
 ## B6.1b — Outlets runtime (registry TLV) + integración HA (stub) + fix build strings
 
 - Se corrige `app/config/app_config.h`:
