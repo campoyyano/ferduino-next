@@ -2,89 +2,91 @@
 
 #include <Arduino.h>
 
-#ifndef APP_SCHEDULER_USE_RTC
-#define APP_SCHEDULER_USE_RTC 0
-#endif
+#include "app/app_build_flags.h"
 
 namespace app::scheduler {
 
-// Hook débil: cuando haya RTC real, implementa esta función en cualquier .cpp:
-//
-// extern "C" uint16_t app_scheduler_rtc_minute_of_day(void) {
-//   // devolver 0..1439 según hora local
-// }
-//
-// Si no está implementada, el linker usará esta débil (0xFFFF) y haremos fallback a millis.
-extern "C" uint16_t app_scheduler_rtc_minute_of_day(void) __attribute__((weak));
-extern "C" uint16_t app_scheduler_rtc_minute_of_day(void) { return 0xFFFF; }
-
-static uint16_t s_lastMinuteOfDay = 0;
-static bool s_minuteTick = false;
-static TimeSource s_src = TimeSource::Millis;
-
-static uint32_t calcMinutesSinceBoot() {
-  return (uint32_t)(millis() / 60000UL);
+// Hook débil: cuando haya RTC real, implementaremos esto en el backend RTC/HAL.
+// Debe devolver minutos desde medianoche (0..1439), o 0xFFFF si no disponible.
+extern "C" uint16_t __attribute__((weak)) app_scheduler_rtc_minute_of_day(void) {
+  return 0xFFFF;
 }
 
-static uint16_t minuteOfDayFromMillis() {
-  const uint32_t m = calcMinutesSinceBoot();
-  return (uint16_t)(m % 1440UL);
+static uint32_t g_bootMs = 0;
+static uint32_t g_lastTickMs = 0;
+static uint16_t g_minuteOfDay = 0;
+static bool g_usingRtc = false;
+
+static uint16_t clampMinute(uint16_t m) {
+  return (m >= 1440) ? (uint16_t)(m % 1440) : m;
 }
 
-static uint16_t minuteOfDayFromRtcOrFallback() {
-#if APP_SCHEDULER_USE_RTC
-  const uint16_t v = app_scheduler_rtc_minute_of_day();
-  if (v != 0xFFFF && v < 1440) {
-    s_src = TimeSource::Rtc;
-    return v;
-  }
-#endif
-  s_src = TimeSource::Millis;
-  return minuteOfDayFromMillis();
+static uint16_t minuteFromMillis(uint32_t nowMs) {
+  // minuto desde "boot" en base a millis()
+  const uint32_t elapsed = nowMs - g_bootMs;
+  const uint32_t minutes = elapsed / 60000UL;
+  return clampMinute((uint16_t)(minutes % 1440UL));
 }
 
 void begin() {
-  s_lastMinuteOfDay = minuteOfDayFromRtcOrFallback();
-  s_minuteTick = false;
+  g_bootMs = millis();
+  g_lastTickMs = g_bootMs;
+
+#if APP_SCHEDULER_USE_RTC
+  const uint16_t rtcMin = app_scheduler_rtc_minute_of_day();
+  if (rtcMin != 0xFFFF) {
+    g_usingRtc = true;
+    g_minuteOfDay = clampMinute(rtcMin);
+    return;
+  }
+#endif
+
+  g_usingRtc = false;
+  g_minuteOfDay = minuteFromMillis(g_bootMs);
 }
 
 void loop() {
-  const uint16_t mod = minuteOfDayFromRtcOrFallback();
-  if (mod != s_lastMinuteOfDay) {
-    s_lastMinuteOfDay = mod;
-    s_minuteTick = true;
-  }
-}
+  const uint32_t now = millis();
 
-uint32_t minutesSinceBoot() {
-  return calcMinutesSinceBoot();
+#if APP_SCHEDULER_USE_RTC
+  const uint16_t rtcMin = app_scheduler_rtc_minute_of_day();
+  if (rtcMin != 0xFFFF) {
+    g_usingRtc = true;
+    g_minuteOfDay = clampMinute(rtcMin);
+    g_lastTickMs = now;
+    return;
+  }
+#endif
+
+  // fallback a millis()
+  g_usingRtc = false;
+
+  // tick cada ~1s para no recalcular constantemente
+  if ((uint32_t)(now - g_lastTickMs) < 1000UL) return;
+  g_lastTickMs = now;
+
+  g_minuteOfDay = minuteFromMillis(now);
 }
 
 uint16_t minuteOfDay() {
-  return minuteOfDayFromRtcOrFallback();
+  return g_minuteOfDay;
 }
 
-TimeHM now() {
-  const uint16_t mod = minuteOfDay();
-  TimeHM t;
-  t.hour = (uint8_t)(mod / 60);
-  t.minute = (uint8_t)(mod % 60);
-  return t;
+uint8_t hour() {
+  return (uint8_t)(g_minuteOfDay / 60);
 }
 
-bool minuteTick() {
-  return s_minuteTick;
+uint8_t minute() {
+  return (uint8_t)(g_minuteOfDay % 60);
 }
 
-bool consumeMinuteTick() {
-  const bool v = s_minuteTick;
-  s_minuteTick = false;
-  return v;
+bool usingRtc() {
+  return g_usingRtc;
 }
 
-TimeSource timeSource() {
-  // El source se determina en la última llamada a minuteOfDayFromRtcOrFallback()
-  return s_src;
+uint32_t tickMs() {
+  // "tick" para telemetría/debug: marca tiempo desde boot
+  return millis() - g_bootMs;
 }
 
 } // namespace app::scheduler

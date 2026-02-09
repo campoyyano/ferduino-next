@@ -1,11 +1,7 @@
 #include "app/outlets/app_outlets.h"
 
 #include "app/nvm/eeprom_registry.h"
-
-// Por defecto: modo stub (sin hardware)
-#ifndef APP_OUTLETS_USE_RELAY_HAL
-#define APP_OUTLETS_USE_RELAY_HAL 0
-#endif
+#include "app/app_build_flags.h"
 
 #if APP_OUTLETS_USE_RELAY_HAL
 #include "hal/hal_relay.h"
@@ -13,69 +9,77 @@
 
 namespace app::outlets {
 
-static bool s_state[9] = {false, false, false, false, false, false, false, false, false};
-
-// Keys TLV (según hoja de ruta):
+// Keys TLV (según migración legacy->registry):
+// 310 → bloque outlets válido (bool)
 // 311..319 → estado outlets (U32 0/1)
+static constexpr uint16_t kOutletValidKey     = 310;
 static constexpr uint16_t kOutletStateBaseKey = 311;
+static constexpr uint8_t  kOutletCount        = 9;
 
-#if APP_OUTLETS_USE_RELAY_HAL
-// Mapeo provisional idx(0..8) -> relé físico (primeros 9 del enum).
-static hal::Relay mapOutletIdxToRelay(uint8_t idx)
-{
-  switch (idx) {
-    case 0: return hal::Relay::Ozonizador;
-    case 1: return hal::Relay::Reator;
-    case 2: return hal::Relay::Bomba1;
-    case 3: return hal::Relay::Bomba2;
-    case 4: return hal::Relay::Bomba3;
-    case 5: return hal::Relay::Temporizador1;
-    case 6: return hal::Relay::Temporizador2;
-    case 7: return hal::Relay::Temporizador3;
-    case 8: return hal::Relay::Temporizador4;
-    default: return hal::Relay::Ozonizador;
-  }
-}
-#endif
+static uint8_t g_state[kOutletCount] = {0};
 
-void begin()
-{
+static void loadFromRegistry() {
   auto& reg = app::nvm::registry();
 
-#if APP_OUTLETS_USE_RELAY_HAL
-  (void)hal::relayInit();
-#endif
+  bool valid = false;
+  (void)reg.getBool(kOutletValidKey, valid);
+  if (!valid) {
+    for (uint8_t i = 0; i < kOutletCount; ++i) g_state[i] = 0;
+    return;
+  }
 
-  for (uint8_t i = 0; i < 9; i++) {
+  for (uint8_t i = 0; i < kOutletCount; ++i) {
     uint32_t v = 0;
-    (void)reg.getU32(static_cast<uint16_t>(kOutletStateBaseKey + i), v);
-    s_state[i] = (v != 0);
-
-#if APP_OUTLETS_USE_RELAY_HAL
-    (void)hal::relaySet(mapOutletIdxToRelay(i), s_state[i]);
-#endif
+    if (reg.getU32((uint16_t)(kOutletStateBaseKey + i), v)) {
+      g_state[i] = (v != 0) ? 1 : 0;
+    } else {
+      g_state[i] = 0;
+    }
   }
 }
 
-void set(uint8_t idx, bool state)
-{
-  if (idx >= 9) return;
-  if (s_state[idx] == state) return;
-
-  s_state[idx] = state;
-
-#if APP_OUTLETS_USE_RELAY_HAL
-  (void)hal::relaySet(mapOutletIdxToRelay(idx), s_state[idx]);
-#endif
-
+static void saveToRegistry() {
   auto& reg = app::nvm::registry();
-  reg.setU32(static_cast<uint16_t>(kOutletStateBaseKey + idx), s_state[idx] ? 1u : 0u);
+
+  (void)reg.setBool(kOutletValidKey, true);
+
+  for (uint8_t i = 0; i < kOutletCount; ++i) {
+    (void)reg.setU32((uint16_t)(kOutletStateBaseKey + i), g_state[i] ? 1u : 0u);
+  }
+
+  (void)reg.commit();
 }
 
-bool get(uint8_t idx)
-{
-  if (idx >= 9) return false;
-  return s_state[idx];
+void begin() {
+  loadFromRegistry();
+
+#if APP_OUTLETS_USE_RELAY_HAL
+  // Aplicar estado inicial a HAL relés (index 0..8)
+  for (uint8_t i = 0; i < kOutletCount; ++i) {
+    hal::relay().set(i, g_state[i] ? hal::RelayState::On : hal::RelayState::Off);
+  }
+#endif
+}
+
+void set(uint8_t index, bool on) {
+  if (index >= kOutletCount) return;
+
+  g_state[index] = on ? 1 : 0;
+
+#if APP_OUTLETS_USE_RELAY_HAL
+  hal::relay().set(index, on ? hal::RelayState::On : hal::RelayState::Off);
+#endif
+
+  saveToRegistry();
+}
+
+bool get(uint8_t index) {
+  if (index >= kOutletCount) return false;
+  return g_state[index] != 0;
+}
+
+uint8_t count() {
+  return kOutletCount;
 }
 
 } // namespace app::outlets

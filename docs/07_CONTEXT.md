@@ -1,5 +1,12 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B6.3c — Fix outlets registry API (bool/u32)
+
+- Se corrige `app/outlets` para usar la API real de `EepromRegistry`:
+  - Key `310` (outlet.block_valid) se lee/escribe con `getBool/setBool`.
+  - Keys `311..319` (outlet.N.state) se leen/escriben con `getU32/setU32` (0/1).
+- Se elimina dependencia de métodos inexistentes (`getU8/setU8`) y se restablece la compilación.
+
 
 ## B6.3b — Fix HAL MQTT (IMqttHal contract) + peek() safe wrapper
 

@@ -2,7 +2,11 @@
 
 #include <Arduino.h>
 
+#include "app/app_build_flags.h"
+
 namespace app::sensors {
+
+#if APP_SENSORS_USE_HW == 0
 
 static Temperatures g_last{};
 
@@ -56,5 +60,32 @@ void loop() {
 Temperatures last() {
   return g_last;
 }
+
+#else  // APP_SENSORS_USE_HW == 1
+
+// Backend HW todavía no implementado en la migración B6.
+// Este stub existe para que el cambio de flag NO rompa compilación.
+// Cuando haya hardware, sustituir por drivers/HAL reales y mantener la misma API.
+
+static Temperatures g_last{};
+
+void begin() {
+  g_last.water_c = 0.0f;
+  g_last.air_c = 0.0f;
+  g_last.water_valid = false;
+  g_last.air_valid = false;
+  g_last.ts_ms = millis();
+}
+
+void loop() {
+  // TODO(HW): leer sensores reales
+  g_last.ts_ms = millis();
+}
+
+Temperatures last() {
+  return g_last;
+}
+
+#endif
 
 } // namespace app::sensors

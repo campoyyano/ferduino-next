@@ -6,141 +6,97 @@ Migrar Ferduino a una arquitectura desacoplada por HAL, capaz de funcionar en:
 
 - Modo FAKE (sin hardware)
 - Modo REAL (hardware)
-- Sin rediseños, solo activando flags o backends
+- Sin rediseños: solo activando flags o backends
 
-
-# Fase A — Infraestructura base (COMPLETA)
+## Fase A — Infraestructura base (COMPLETA)
 
 Objetivo: Port funcional en PlatformIO.
 
 Incluye:
 
 - PlatformIO Mega2560
-- HAL base:
-  - network
-  - mqtt
-  - rtc
-  - relay
-  - storage
+- HAL base: network, mqtt, rtc, relay, storage
 - MQTT operativo
-- Backend Home Assistant básico
-- Topics:
-  - state
-  - availability
+- Backend Home Assistant
+- Topics: state, availability
 
-Estado: ✔ COMPLETA
+**Estado: ✔ COMPLETA**
 
+## Fase B — Capa App desacoplada (FAKE)
 
-# Fase B — Capa App desacoplada (FAKE)
-
-## B4 — Persistencia (Registry TLV) ✔
-
-Infraestructura:
+### B4 — Persistencia (Registry TLV) ✔
 
 - EepromRegistry (TLV)
 - Migración legacy
 - Flags de migración
 
-Keys actuales:
+Keys migradas relevantes (estado actual):
 
 - 100–102: temperatura agua
 - 310–319: outlets
 - 500–585: dosificación
 
-Documentación:
-- AUDIT_SUMMARY_B_G.md
+Ver: `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md` y `docs/AUDIT_CODEX_B6_SUMMARY_B_G.md`.
 
+### B5 — Comunicaciones y Home Assistant ✔
 
-## B5 — Comunicaciones y Home Assistant ✔
-
-Componentes:
-
-- CommsHABackend
-- HA Discovery
+- `CommsHABackend`
+- `ha_discovery`
 - Topics:
-
-  ferduino/<device>/state  
-  ferduino/<device>/availability  
-  ferduino/<device>/cmd/outlet/<n>
-
-Entidades:
-
-- Switch outlets
-- Sensores de reloj
+  - `ferduino/<device>/state`
+  - `ferduino/<device>/availability`
+  - `ferduino/<device>/cmd/outlet/<n>`
+- Entidades HA:
+  - outlets (switch)
+  - clock_* (sensores)
 - LWT automático
 
-HAL MQTT corregido y estable.
+### B6 — Runtime funcional FAKE
 
-
-## B6 — Runtime funcional FAKE
-
-### B6.1 ✔
-- Sensores FAKE (temperatura)
-- Telemetría MQTT
+#### B6.1 ✔
+- Sensores FAKE (temperatura) + telemetría `telemetry/temps`
 - Outlets runtime + persistencia
 
-### B6.2 ✔
-- Scheduler FAKE basado en millis()
-- Hook preparado para RTC
-- Flag:
-  APP_SCHEDULER_USE_RTC
+#### B6.2 ✔
+- Scheduler FAKE (millis)
+- Scheduler preparado para RTC (flag + hook)
 
-### B6.3 ✔ (en cierre)
-Auditoría de arquitectura:
+#### B6.3 ✔ (en cierre)
+Auditoría y estabilización:
 
-- Normalización FAKE/REAL
-- Flags por módulo:
-  - APP_SCHEDULER_USE_RTC
-  - APP_OUTLETS_USE_RELAY_HAL
-- Correcciones HAL MQTT
-- Wrapper TCP seguro (peek)
-- Limpieza runtime
-- Documentación completa
+- Normalización FAKE/REAL por flags
+- Fixes HAL MQTT y robustez
+- Documentación consolidada
 
+## Estado actual del proyecto
 
-# Estado actual del proyecto
+- Fase A: ✔
+- B4: ✔
+- B5: ✔
+- B6.1: ✔
+- B6.2: ✔
+- B6.3: en cierre (B6.3c)
 
-Fase A: ✔  
-Fase B4: ✔  
-Fase B5: ✔  
-Fase B6: ✔ (estable)
-
-Arquitectura base finalizada.
-
-
-# Fase C — Lógica funcional (siguiente)
-
-Objetivo: comportamiento real del acuario.
+## Siguiente fase — Migración funcional (B7/C)
 
 Orden recomendado:
 
-## C1 — Scheduler de eventos
-- Encendido/apagado por hora
-- Base para automatizaciones
+1) Scheduler de eventos (on/off por hora)
+2) Control automático de outlets
+3) Dosificación automática
+4) Iluminación programada
+5) Configuración dinámica vía HA/MQTT
 
-## C2 — Control automático de outlets
+## Flags de módulos (FAKE vs REAL)
 
-## C3 — Dosificación automática
+- `APP_SCHEDULER_USE_RTC`:
+  - 0 = millis() FAKE
+  - 1 = RTC (requiere hook `app_scheduler_rtc_minute_of_day`)
 
-## C4 — Iluminación programada
+- `APP_OUTLETS_USE_RELAY_HAL`:
+  - 0 = stub
+  - 1 = HAL relés
 
-## C5 — Configuración dinámica vía HA/MQTT
-
-
-# Flags actuales
-
-Definidos en platformio.ini:
-
-- APP_SCHEDULER_USE_RTC
-- APP_OUTLETS_USE_RELAY_HAL
-
-Filosofía:
-
-APP_<MODULE>_USE_<BACKEND>=0/1
-
-
-# Riesgo arquitectónico actual
-
-Bajo.
-
-El sistema puede migrar a hardware real sin rediseño.
+- `APP_SENSORS_USE_HW`:
+  - 0 = FAKE
+  - 1 = HW (pendiente drivers/HAL)
