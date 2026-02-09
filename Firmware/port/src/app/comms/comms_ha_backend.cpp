@@ -41,36 +41,47 @@ public:
     for (int i = 1; i <= 9; i++) {
       snprintf(_cmdOutletTopic[i], sizeof(_cmdOutletTopic[i]),
                "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
-      (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
     }
 
     // Config admin topic
     snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic), "%s/%s/cmd/config", BASE_TOPIC, deviceId);
-    (void)hal::mqtt().subscribe(_cmdCfgTopic);
-
-    // Discovery (retained)
-    if (!_discoveryPublished) {
-      app::ha::publishDiscoveryMinimal();
-      _discoveryPublished = true;
-    }
-
-    // Estado inicial
-    publishStatePlaceholder();
-    publishAvailability(true);
 
     _lastReconnectMs = millis();
+    _lastStateMs = millis();
+    _discoveryPublished = false;
   }
 
   void loop() override {
     const uint32_t now = millis();
 
-    // reconexión simple si MQTT cae
     if (!hal::mqtt().connected()) {
       if (now - _lastReconnectMs > 3000) {
         _lastReconnectMs = now;
-        (void)hal::mqtt().reconnect();
+        (void)hal::mqtt().connect();
       }
       return;
+    }
+
+    // Subscribe una vez al conectar
+    if (!_subscribed) {
+      _subscribed = true;
+
+      // Config admin
+      (void)hal::mqtt().subscribe(_cmdCfgTopic);
+
+      // Outlets
+      for (int i = 1; i <= 9; i++) {
+        (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
+      }
+
+      // Discovery
+      if (!_discoveryPublished) {
+        app::ha::publishDiscoveryMinimal();
+        _discoveryPublished = true;
+      }
+
+      publishAvailability(true);
+      publishStatePlaceholder();
     }
 
     // publish periódico de estado (placeholder)
@@ -80,10 +91,28 @@ public:
     }
   }
 
+  bool connected() const override {
+    return hal::mqtt().connected();
+  }
+
+  bool publishStatus(const char* key, const char* value, bool retained=false) override {
+    if (!key || !value) return false;
+
+    char msg[180];
+    snprintf(msg, sizeof(msg), "{\"%s\":\"%s\"}", key, value);
+
+    return hal::mqtt().publish(
+      _stateTopic,
+      (const uint8_t*)msg,
+      strlen(msg),
+      retained
+    ) == hal::MqttError::Ok;
+  }
+
   void onMqttMessage(const char* topic, const uint8_t* payload, size_t len) override {
     if (!topic || !payload || len == 0) return;
 
-    // B3.4: admin config primero
+    // Admin config primero
     if (app::cfgadmin::handleConfigCommand(topic, payload, len)) {
       return;
     }
@@ -96,9 +125,9 @@ public:
     // Outlets 1..9
     for (int i = 1; i <= 9; i++) {
       if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
-        const bool on = (_rx[0] == '1');
-        app::outlets::set((uint8_t)(i - 1), on);
-        publishStatePlaceholder(); // refleja el cambio inmediatamente
+        const uint8_t v = (_rx[0] == '1') ? 1 : 0;
+        app::outlets::set((uint8_t)(i - 1), (v != 0));
+        publishStatePlaceholder();
         return;
       }
     }
@@ -193,6 +222,7 @@ private:
   uint32_t _lastStateMs = 0;
 
   bool _discoveryPublished = false;
+  bool _subscribed = false;
 
   char _stateTopic[96] = {0};
   char _availTopic[96] = {0};
@@ -201,11 +231,10 @@ private:
   char _cmdOutletTopic[10][96] = {{0}};
   char _cmdCfgTopic[96] = {0};
 
-  // rx buffer
-  char _rx[96] = {0};
+  char _rx[32] = {0};
 };
 
-ICommsBackend& commsHABackend() {
+ICommsBackend& comms_ha_singleton() {
   return CommsHABackend::instance();
 }
 

@@ -27,7 +27,7 @@ namespace app::cfg {
 static AppConfig g_cfg{};
 
 // -----------------------------
-// CRC32 (reutilizable para otros módulos)
+// CRC32
 // -----------------------------
 
 static uint32_t crc32_update(uint32_t crc, uint8_t data) {
@@ -42,29 +42,35 @@ static uint32_t crc32_update(uint32_t crc, uint8_t data) {
 uint32_t computeCrc32(const void* data, size_t len) {
   const uint8_t* p = (const uint8_t*)data;
   uint32_t crc = 0xFFFFFFFFUL;
-  for (size_t i = 0; i < len; i++) crc = crc32_update(crc, p[i]);
+  for (size_t i = 0; i < len; i++) {
+    crc = crc32_update(crc, p[i]);
+  }
   return ~crc;
 }
 
 // -----------------------------
-// Helpers packing IP
+// Helpers
 // -----------------------------
 
-static uint32_t packIp(const Ip4& ip) {
-  return (uint32_t)ip.a | ((uint32_t)ip.b << 8) | ((uint32_t)ip.c << 16) | ((uint32_t)ip.d << 24);
+static bool parseIp4(const char* s, Ip4& out) {
+  if (!s) return false;
+  int a, b, c, d;
+  const int n = sscanf(s, "%d.%d.%d.%d", &a, &b, &c, &d);
+  if (n != 4) return false;
+  if (a < 0 || a > 255) return false;
+  if (b < 0 || b > 255) return false;
+  if (c < 0 || c > 255) return false;
+  if (d < 0 || d > 255) return false;
+  out = {(uint8_t)a, (uint8_t)b, (uint8_t)c, (uint8_t)d};
+  return true;
 }
 
-static Ip4 unpackIp(uint32_t u) {
-  Ip4 ip{};
-  ip.a = (uint8_t)(u & 0xFF);
-  ip.b = (uint8_t)((u >> 8) & 0xFF);
-  ip.c = (uint8_t)((u >> 16) & 0xFF);
-  ip.d = (uint8_t)((u >> 24) & 0xFF);
-  return ip;
+static void formatIp4(const Ip4& ip, char* out, size_t outLen) {
+  if (!out || outLen == 0) return;
+  snprintf(out, outLen, "%u.%u.%u.%u", ip.a, ip.b, ip.c, ip.d);
 }
 
 static bool parseMac(const char* s, uint8_t out[6]) {
-  // Formato esperado: "02:FD:00:00:00:01" (hex)
   if (!s) return false;
   unsigned int b[6] = {0};
   const int n = sscanf(s, "%2x:%2x:%2x:%2x:%2x:%2x", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]);
@@ -111,14 +117,20 @@ void applyDefaults(AppConfig& c) {
 
   strncpy(c.mqtt.deviceId, FERDUINO_DEVICE_ID, sizeof(c.mqtt.deviceId) - 1);
   c.mqtt.deviceId[sizeof(c.mqtt.deviceId) - 1] = '\0';
+
+  // defaults seguros
+  strncpy(c.mqtt.clientId, c.mqtt.deviceId, sizeof(c.mqtt.clientId) - 1);
+  c.mqtt.clientId[sizeof(c.mqtt.clientId) - 1] = '\0';
+
+  c.mqtt.username[0] = '\0';
+  c.mqtt.apikey[0] = '\0';
 }
 
 const AppConfig& get() { return g_cfg; }
-
 void set(const AppConfig& cfg) { g_cfg = cfg; }
 
 // -----------------------------
-// Load / Save vía registry TLV (NO toca EEPROM legacy 0..1023)
+// Load / Save vía registry TLV
 // -----------------------------
 
 bool loadOrDefault() {
@@ -126,8 +138,9 @@ bool loadOrDefault() {
 
   auto& reg = app::nvm::registry();
   (void)reg.begin();
+
   if (!reg.isValid()) {
-    // Registry no inicializado -> lo dejamos en defaults.
+    // Registry no inicializado -> defaults.
     return false;
   }
 
@@ -153,15 +166,28 @@ bool loadOrDefault() {
     g_cfg.mqtt.deviceId[sizeof(g_cfg.mqtt.deviceId) - 1] = '\0';
   }
 
+  // mantener clientId alineado por defecto si está vacío
+  if (g_cfg.mqtt.clientId[0] == '\0') {
+    strncpy(g_cfg.mqtt.clientId, g_cfg.mqtt.deviceId, sizeof(g_cfg.mqtt.clientId) - 1);
+    g_cfg.mqtt.clientId[sizeof(g_cfg.mqtt.clientId) - 1] = '\0';
+  }
+
   if (reg.getBool(KEY_NET_DHCP, b)) {
     g_cfg.net.useDhcp = b;
   }
 
-  if (reg.getU32(KEY_NET_IP, u32)) g_cfg.net.ip = unpackIp(u32);
-  if (reg.getU32(KEY_NET_GW, u32)) g_cfg.net.gateway = unpackIp(u32);
-  if (reg.getU32(KEY_NET_SUBNET, u32)) g_cfg.net.subnet = unpackIp(u32);
-  if (reg.getU32(KEY_NET_DNS, u32)) g_cfg.net.dns = unpackIp(u32);
-
+  if (reg.getStr(KEY_NET_IP, tmp, sizeof(tmp))) {
+    (void)parseIp4(tmp, g_cfg.net.ip);
+  }
+  if (reg.getStr(KEY_NET_GW, tmp, sizeof(tmp))) {
+    (void)parseIp4(tmp, g_cfg.net.gateway);
+  }
+  if (reg.getStr(KEY_NET_SUBNET, tmp, sizeof(tmp))) {
+    (void)parseIp4(tmp, g_cfg.net.subnet);
+  }
+  if (reg.getStr(KEY_NET_DNS, tmp, sizeof(tmp))) {
+    (void)parseIp4(tmp, g_cfg.net.dns);
+  }
   if (reg.getStr(KEY_NET_MAC, tmp, sizeof(tmp))) {
     (void)parseMac(tmp, g_cfg.net.mac);
   }
@@ -173,26 +199,26 @@ bool save() {
   auto& reg = app::nvm::registry();
   (void)reg.begin();
   if (!reg.isValid()) {
-    if (!reg.format()) return false;
+    (void)reg.format();
   }
-
-  const uint32_t backend = (g_cfg.backendMode == BACKEND_HA) ? 1u : 0u;
-  const uint32_t ip  = packIp(g_cfg.net.ip);
-  const uint32_t gw  = packIp(g_cfg.net.gateway);
-  const uint32_t sn  = packIp(g_cfg.net.subnet);
-  const uint32_t dns = packIp(g_cfg.net.dns);
-
-  char macStr[24];
-  formatMac(g_cfg.net.mac, macStr, sizeof(macStr));
 
   if (!reg.beginEdit()) return false;
 
-  (void)reg.setU32(KEY_BACKEND_MODE, backend);
+  (void)reg.setU32(KEY_BACKEND_MODE, (g_cfg.backendMode == BACKEND_HA) ? 1u : 0u);
   (void)reg.setStr(KEY_MQTT_HOST, g_cfg.mqtt.host);
   (void)reg.setU32(KEY_MQTT_PORT, (uint32_t)g_cfg.mqtt.port);
   (void)reg.setStr(KEY_DEVICE_ID, g_cfg.mqtt.deviceId);
 
   (void)reg.setBool(KEY_NET_DHCP, g_cfg.net.useDhcp);
+
+  uint32_t ip = ((uint32_t)g_cfg.net.ip.a)      | ((uint32_t)g_cfg.net.ip.b << 8)      | ((uint32_t)g_cfg.net.ip.c << 16)      | ((uint32_t)g_cfg.net.ip.d << 24);
+  uint32_t gw = ((uint32_t)g_cfg.net.gateway.a) | ((uint32_t)g_cfg.net.gateway.b << 8) | ((uint32_t)g_cfg.net.gateway.c << 16) | ((uint32_t)g_cfg.net.gateway.d << 24);
+  uint32_t sn = ((uint32_t)g_cfg.net.subnet.a)  | ((uint32_t)g_cfg.net.subnet.b << 8)  | ((uint32_t)g_cfg.net.subnet.c << 16)  | ((uint32_t)g_cfg.net.subnet.d << 24);
+  uint32_t dns= ((uint32_t)g_cfg.net.dns.a)     | ((uint32_t)g_cfg.net.dns.b << 8)     | ((uint32_t)g_cfg.net.dns.c << 16)     | ((uint32_t)g_cfg.net.dns.d << 24);
+
+  char macStr[24];
+  formatMac(g_cfg.net.mac, macStr, sizeof(macStr));
+
   (void)reg.setU32(KEY_NET_IP, ip);
   (void)reg.setU32(KEY_NET_GW, gw);
   (void)reg.setU32(KEY_NET_SUBNET, sn);

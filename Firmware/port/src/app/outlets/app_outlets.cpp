@@ -16,13 +16,11 @@ namespace app::outlets {
 static bool s_state[9] = {false, false, false, false, false, false, false, false, false};
 
 // Keys TLV (según hoja de ruta):
-// 310 outlet.block_valid (Bool)
-// 311..319 outlet.N.state (U32 -> 0/1)
+// 311..319 → estado outlets (U32 0/1)
 static constexpr uint16_t kOutletStateBaseKey = 311;
 
 #if APP_OUTLETS_USE_RELAY_HAL
-// Mapeo provisional idx(0..8) -> relé físico (primeros 9 relés del enum).
-// Ajustaremos cuando se confirme el mapping exacto del Ferduino original.
+// Mapeo provisional idx(0..8) -> relé físico (primeros 9 del enum).
 static hal::Relay mapOutletIdxToRelay(uint8_t idx)
 {
   switch (idx) {
@@ -49,7 +47,8 @@ void begin()
 #endif
 
   for (uint8_t i = 0; i < 9; i++) {
-    const uint32_t v = reg.getU32(static_cast<uint16_t>(kOutletStateBaseKey + i), 0);
+    uint32_t v = 0;
+    (void)reg.getU32(static_cast<uint16_t>(kOutletStateBaseKey + i), v);
     s_state[i] = (v != 0);
 
 #if APP_OUTLETS_USE_RELAY_HAL
@@ -61,7 +60,6 @@ void begin()
 void set(uint8_t idx, bool state)
 {
   if (idx >= 9) return;
-
   if (s_state[idx] == state) return;
 
   s_state[idx] = state;

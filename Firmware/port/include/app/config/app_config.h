@@ -26,14 +26,15 @@ struct NetworkConfig {
 };
 
 struct MqttConfig {
-  const char* host;
+  // Buffers mutables (runtime editable por MQTT admin)
+  char host[64];
   uint16_t port;
 
-  const char* deviceId;   // topic base ferduino/<deviceId>/...
-  const char* clientId;   // MQTT client id (puede coincidir o no con deviceId)
+  char deviceId[64];   // topic base ferduino/<deviceId>/...
+  char clientId[64];   // MQTT client id (puede coincidir o no con deviceId)
 
-  const char* username;   // legacy (si aplica)
-  const char* apikey;     // legacy (si aplica)
+  char username[64];   // legacy (si aplica)
+  char apikey[64];     // legacy (si aplica)
 };
 
 struct AppConfig {
@@ -52,7 +53,7 @@ bool loadOrDefault();                // carga desde NVM registry (TLV) o aplica 
 bool save();                         // guarda en NVM registry (TLV) con CRC
 void factoryReset();                 // borra keys en NVM registry y vuelve a defaults en RAM
 
-// NUEVO B3.4: aplicar config en RAM (sin guardar aún)
+// aplicar config en RAM (sin guardar aún)
 void set(const AppConfig& cfg);
 
 void applyDefaults(AppConfig& cfg);  // rellena con build_flags

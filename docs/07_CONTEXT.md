@@ -1,5 +1,36 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## B6.1b — Outlets runtime (registry TLV) + integración HA (stub) + fix build strings
+
+- Se corrige `app/config/app_config.h`:
+  - `MqttConfig` pasa de `const char*` a buffers `char[64]` para permitir edición en runtime.
+  - Evita errores de compilación tipo “assignment of read-only location” al hacer `strncpy()` y null-terminate.
+
+- Se ajusta `app/config/app_config.cpp` (cambios mínimos):
+  - Mantiene `clientId` alineado con `deviceId` por defecto.
+  - Continúa cargando/guardando por registry TLV (sin tocar EEPROM legacy 0..1023).
+
+- Se crea módulo `app/outlets`:
+  - Archivos:
+    - `include/app/outlets/app_outlets.h`
+    - `src/app/outlets/app_outlets.cpp`
+  - API:
+    - `begin()`, `set(idx,state)`, `get(idx)`
+  - Persistencia TLV:
+    - Keys `311..319` (U32 0/1)
+  - Se adapta a la firma real de registry:
+    - `getU32(key, out)` (no devuelve valor).
+
+- Se actualiza backend HA (`src/app/comms/comms_ha_backend.cpp`):
+  - Elimina dependencia de `ha_outlet_control`.
+  - `cmd/outlet/<n>` → `app::outlets::set(n-1, state)`
+  - `state` publica outlets desde `app::outlets::get()`.
+
+- Implementación STUB:
+  - `APP_OUTLETS_USE_RELAY_HAL` (default=0)
+  - No se accede a hardware (PCF8575) en este paso.
+
+
 ## B6.1a — Sensores (Temperatura) FAKE + telemetría debug
 
 - Se crea módulo `app/sensors` con tipos y API:
