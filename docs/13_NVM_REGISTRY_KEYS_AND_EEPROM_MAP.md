@@ -77,6 +77,24 @@ Estas keys vienen de:
 | `310` | `outlet.block_valid` | `Bool` | true si legacy `840==66` | `840 (u8 sentinel)` | Migrado |
 | `311..319` | `outlet.N.state` | `U32` | estado legacy (0/1 habitual) | `841..849 (9 bytes)` | Migrado |
 
+
+### C.2a Scheduler eventos (ventanas ON/OFF, 1..9)
+
+Keys añadidas en Fase C1.2 para persistir una ventana ON/OFF por canal.
+Dominio elegido: **3xx** (control de salidas) para evitar colisión con rango `600..699` reservado a RTC/tiempo.
+
+| Key ID | Nombre estable | Tipo | Semántica | Origen | Estado |
+|---:|---|---|---|---|---|
+| `330` | `scheduler.events.valid` | `Bool` | true si existe config persistida | Port (C1.2) | Nuevo |
+| `331..339` | `scheduler.events.chN.enabled` | `Bool` | habilita canal N (N=1..9) | Port (C1.2) | Nuevo |
+| `340..348` | `scheduler.events.chN.onMinute` | `U32` | minuto del día ON (0..1439) | Port (C1.2) | Nuevo |
+| `350..358` | `scheduler.events.chN.offMinute` | `U32` | minuto del día OFF (0..1439) | Port (C1.2) | Nuevo |
+
+Notas:
+- El motor vive en `Firmware/port/src/app/scheduler/app_event_scheduler.cpp`.
+- `events::begin()` carga estas keys si `scheduler.events.valid=true`.
+- `events::setWindow()` persiste cambios y hace commit agrupado (beginEdit/endEdit).
+
 ### C.3 Dosificadora (6 canales)
 
 | Key ID | Nombre estable | Tipo | Semántica | Origen legacy | Estado |

@@ -4,6 +4,7 @@
 
 #include "app/config/app_config.h"
 #include "app/config/app_config_mqtt_admin.h"
+#include "app/scheduler/app_event_scheduler.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -45,19 +46,17 @@ static void publishOk(const char* pubTopic) {
 }
 
 static void publishJson(const char* pubTopic, const char* json, bool retained = false) {
-  if (!json) return;
   if (!pubTopic || pubTopic[0] == '\0') return;
+  if (!json) return;
   (void)hal::mqtt().publish(pubTopic, (const uint8_t*)json, strlen(json), retained);
 }
 
-/* ==== Backend Legacy ==== */
+/* ==== backend ==== */
 
 class CommsLegacyBackend final : public ICommsBackend {
 public:
   void begin() override {
-    // No hay setup() global todavía -> garantizamos cfg en RAM
     (void)app::cfg::loadOrDefault();
-
     const auto& appcfg = app::cfg::get();
 
     hal::MqttConfig cfg;
@@ -81,6 +80,32 @@ public:
       if (n < 0 || (size_t)n >= sizeof(_cmdCfgTopic)) {
         _cmdCfgTopic[0] = '\0';
         Serial.println("[legacy] ERROR: cmd config topic truncated");
+      }
+    }
+
+    // C1.2: schedule cmd/config topics (namespace ferduino/<deviceId>/...)
+    for (int i = 1; i <= 9; i++) {
+      const int n1 = snprintf(_cmdScheduleTopic[i], sizeof(_cmdScheduleTopic[i]),
+                              "ferduino/%s/cmd/schedule/%d", appcfg.mqtt.deviceId, i);
+      if (n1 < 0 || (size_t)n1 >= sizeof(_cmdScheduleTopic[i])) {
+        _cmdScheduleTopic[i][0] = '\0';
+        Serial.println("[legacy] ERROR: cmd schedule topic truncated");
+      }
+
+      const int n2 = snprintf(_cfgScheduleTopic[i], sizeof(_cfgScheduleTopic[i]),
+                              "ferduino/%s/cfg/schedule/%d", appcfg.mqtt.deviceId, i);
+      if (n2 < 0 || (size_t)n2 >= sizeof(_cfgScheduleTopic[i])) {
+        _cfgScheduleTopic[i][0] = '\0';
+        Serial.println("[legacy] ERROR: cfg schedule topic truncated");
+      }
+    }
+
+    {
+      const int n3 = snprintf(_ackScheduleTopic, sizeof(_ackScheduleTopic),
+                              "ferduino/%s/cfg/schedule/ack", appcfg.mqtt.deviceId);
+      if (n3 < 0 || (size_t)n3 >= sizeof(_ackScheduleTopic)) {
+        _ackScheduleTopic[0] = '\0';
+        Serial.println("[legacy] ERROR: ack schedule topic truncated");
       }
     }
 
@@ -110,6 +135,16 @@ public:
         if (_cmdCfgTopic[0] != '\0') {
           (void)hal::mqtt().subscribe(_cmdCfgTopic);
         }
+
+        // C1.2: subscribe schedule commands
+        for (int i = 1; i <= 9; i++) {
+          if (_cmdScheduleTopic[i][0] != '\0') {
+            (void)hal::mqtt().subscribe(_cmdScheduleTopic[i]);
+          }
+        }
+
+        // C1.2: publicar retained de schedule en reconnect
+        publishAllSchedulesRetained();
 
         // Online retained (útil para legacy; si molestase, se retira)
         const char online[] = "{\"online\":1}";
@@ -147,6 +182,20 @@ public:
       return;
     }
 
+    // C1.2: schedule cmd (JSON) en namespace ferduino/<deviceId>/cmd/schedule/N
+    for (int i = 1; i <= 9; i++) {
+      if (_cmdScheduleTopic[i][0] != '\0' && strcmp(topic, _cmdScheduleTopic[i]) == 0) {
+        // Copia payload a buffer pequeño
+        char json[96];
+        const size_t n = (len >= sizeof(json)) ? (sizeof(json) - 1) : len;
+        memcpy(json, payload, n);
+        json[n] = '\0';
+
+        handleScheduleCommand((uint8_t)(i - 1), json);
+        return;
+      }
+    }
+
     if (_subTopic[0] == '\0') return;
     if (strcmp(topic, _subTopic) != 0) return;
 
@@ -169,30 +218,7 @@ public:
     if (argc <= 0) return;
 
     const int id = atoi(_argv[0]);
-
-    // Public topic: response en "username/apikey/topic/response"
-    // TODO: completar IDs gradualmente (B6+)
-    switch (id) {
-      case 0:  handleTemps_ID0(argc); break;
-      case 1:  handleLeds_ID1(argc); break;
-      case 2:  handleRelay_ID2(argc); break;
-      case 3:  handleAlimentador_ID3(argc); break;
-      case 4:  handleTPA_ID4(argc); break;
-      case 5:  handleTimers_ID5(argc); break;
-      case 6:  handlePwmLeds_ID6(argc); break;
-      case 7:  handlePwmLeds2_ID7(argc); break;
-      case 8:  handlePwmLeds3_ID8(argc); break;
-      case 9:  handlePwmLeds4_ID9(argc); break;
-      case 10: handlePwmLeds5_ID10(argc); break;
-      case 11: handleDosadora_ID11(argc); break;
-      case 12: handleDosadoraDay_ID12(argc); break;
-      case 13: handlePhReactor_ID13(argc); break;
-      case 14: handlePhAquarium_ID14(argc); break;
-      case 15: handleOrp_ID15(argc); break;
-      case 16: handleDensity_ID16(argc); break;
-      case 17: handleFilePump_ID17(argc); break;
-      default: publishUnknown(id); break;
-    }
+    handleById(id, argc);
   }
 
   static void onMqttMessageStatic(const char* topic, const uint8_t* payload, size_t len) {
@@ -213,166 +239,241 @@ private:
       char msg[200];
       snprintf(msg, sizeof(msg),
                "{\"setTemp\":%.2f,\"offTemp\":%.2f,\"alarmTemp\":%.2f}",
-               D(setTemp), D(offTemp), D(alarmTemp));
+               D(setTemp),
+               D(offTemp),
+               D(alarmTemp));
       publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
+      return;
+    }
+    publishOk(_pubTopic);
   }
 
   // ========== ID 1 ==========
-  void handleLeds_ID1(int argc) {
-    const int mode = (argc >= 2) ? atoi(_argv[1]) : 0;
-    if (mode == 0) {
-      const float setW=0.0f, setB=0.0f, setRB=0.0f, setR=0.0f, setUV=0.0f;
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-               "{\"setW\":%.2f,\"setB\":%.2f,\"setRB\":%.2f,\"setR\":%.2f,\"setUV\":%.2f}",
-               D(setW), D(setB), D(setRB), D(setR), D(setUV));
-      publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
+  void handlePH_ID1(int argc) {
+    (void)argc;
+    publishOk(_pubTopic);
   }
 
   // ========== ID 2 ==========
-  void handleRelay_ID2(int argc) {
+  void handleORP_ID2(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 3 ==========
-  void handleAlimentador_ID3(int argc) {
+  void handlePress_ID3(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 4 ==========
-  void handleTPA_ID4(int argc) {
+  void handleLeds_ID4(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 5 ==========
-  void handleTimers_ID5(int argc) {
+  void handleSockets_ID5(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 6 ==========
-  void handlePwmLeds_ID6(int argc) {
+  void handleDosing_ID6(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 7 ==========
-  void handlePwmLeds2_ID7(int argc) {
+  void handleRunners_ID7(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
   // ========== ID 8 ==========
-  void handlePwmLeds3_ID8(int argc) {
+  void handleOther_ID8(int argc) {
     (void)argc;
     publishOk(_pubTopic);
   }
 
-  // ========== ID 9 ==========
-  void handlePwmLeds4_ID9(int argc) {
-    (void)argc;
-    publishOk(_pubTopic);
-  }
+  void handleById(int id, int argc) {
+    switch (id) {
+      case 0: handleTemps_ID0(argc); return;
+      case 1: handlePH_ID1(argc); return;
+      case 2: handleORP_ID2(argc); return;
+      case 3: handlePress_ID3(argc); return;
+      case 4: handleLeds_ID4(argc); return;
+      case 5: handleSockets_ID5(argc); return;
+      case 6: handleDosing_ID6(argc); return;
+      case 7: handleRunners_ID7(argc); return;
+      case 8: handleOther_ID8(argc); return;
+      default:
+        break;
+    }
 
-  // ========== ID 10 ==========
-  void handlePwmLeds5_ID10(int argc) {
-    (void)argc;
-    publishOk(_pubTopic);
-  }
-
-  // ========== ID 11 ==========
-  void handleDosadora_ID11(int argc) {
-    (void)argc;
-    publishOk(_pubTopic);
-  }
-
-  // ========== ID 12 ==========
-  void handleDosadoraDay_ID12(int argc) {
-    (void)argc;
-    publishOk(_pubTopic);
-  }
-
-  // ========== ID 13 ==========
-  void handlePhReactor_ID13(int argc) {
-    const int mode = (argc >= 2) ? atoi(_argv[1]) : 0;
-    if (mode == 0) {
-      const float setPHR=0.0f, offPHR=0.0f, alarmPHR=0.0f;
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-               "{\"setPHR\":%.2f,\"offPHR\":%.2f,\"alarmPHR\":%.2f}",
-               D(setPHR), D(offPHR), D(alarmPHR));
-      publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
-  }
-
-  // ========== ID 14 ==========
-  void handlePhAquarium_ID14(int argc) {
-    const int mode = (argc >= 2) ? atoi(_argv[1]) : 0;
-    if (mode == 0) {
-      const float setPHA=0.0f, offPHA=0.0f, alarmPHA=0.0f;
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-               "{\"setPHA\":%.2f,\"offPHA\":%.2f,\"alarmPHA\":%.2f}",
-               D(setPHA), D(offPHA), D(alarmPHA));
-      publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
-  }
-
-  // ========== ID 15 ==========
-  void handleOrp_ID15(int argc) {
-    const int mode = (argc >= 2) ? atoi(_argv[1]) : 0;
-    if (mode == 0) {
-      const float setORP=0.0f, offORP=0.0f, alarmORP=0.0f;
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-               "{\"setORP\":%.2f,\"offORP\":%.2f,\"alarmORP\":%.2f}",
-               D(setORP), D(offORP), D(alarmORP));
-      publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
-  }
-
-  // ========== ID 16 ==========
-  void handleDensity_ID16(int argc) {
-    const int mode = (argc >= 2) ? atoi(_argv[1]) : 0;
-    if (mode == 0) {
-      const float setDEN=0.0f, offDEN=0.0f, alarmDEN=0.0f;
-      char msg[200];
-      snprintf(msg, sizeof(msg),
-               "{\"setDEN\":%.2f,\"offDEN\":%.2f,\"alarmDEN\":%.2f}",
-               D(setDEN), D(offDEN), D(alarmDEN));
-      publishJson(_pubTopic, msg, false);
-    } else publishOk(_pubTopic);
-  }
-
-  // ========== ID 17 ==========
-  void handleFilePump_ID17(int argc) {
-    int idx = 0;
-    if (argc >= 3) idx = atoi(_argv[2]); // original usa inParse[2]
-    if (idx < 0) idx = 0;
-
-    char msg[96];
-    snprintf(msg, sizeof(msg), "{\"filepump%d\":\"0000\"}", idx);
-    publishJson(_pubTopic, msg, false);
-  }
-
-  void publishUnknown(int id) {
     char msg[96];
     snprintf(msg, sizeof(msg), "{\"error\":\"unknown_id\",\"id\":%d}", id);
     publishJson(_pubTopic, msg, false);
   }
 
 private:
+  static bool jsonFindString(const char* json, const char* key, char* out, size_t outLen) {
+    if (!json || !key || !out || outLen == 0) return false;
+    out[0] = '\0';
+
+    char pat[24];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+
+    const char* p = strstr(json, pat);
+    if (!p) return false;
+    p = strchr(p, ':');
+    if (!p) return false;
+    p++;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '"') return false;
+    p++;
+
+    size_t i = 0;
+    while (*p && *p != '"' && i + 1 < outLen) {
+      out[i++] = *p++;
+    }
+    out[i] = '\0';
+    return (*p == '"');
+  }
+
+  static bool jsonFindBool(const char* json, const char* key, bool& out) {
+    if (!json || !key) return false;
+
+    char pat[24];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+
+    const char* p = strstr(json, pat);
+    if (!p) return false;
+    p = strchr(p, ':');
+    if (!p) return false;
+    p++;
+    while (*p == ' ' || *p == '\t') p++;
+
+    if (strncmp(p, "true", 4) == 0) {
+      out = true;
+      return true;
+    }
+    if (strncmp(p, "false", 5) == 0) {
+      out = false;
+      return true;
+    }
+    if (*p == '1') { out = true; return true; }
+    if (*p == '0') { out = false; return true; }
+    return false;
+  }
+
+  static bool parseHHMM(const char* s, app::scheduler::TimeHM& out) {
+    if (!s) return false;
+    if (!(s[0] >= '0' && s[0] <= '9')) return false;
+    if (!(s[1] >= '0' && s[1] <= '9')) return false;
+    if (s[2] != ':') return false;
+    if (!(s[3] >= '0' && s[3] <= '9')) return false;
+    if (!(s[4] >= '0' && s[4] <= '9')) return false;
+
+    const uint8_t hh = (uint8_t)((s[0] - '0') * 10 + (s[1] - '0'));
+    const uint8_t mm = (uint8_t)((s[3] - '0') * 10 + (s[4] - '0'));
+    if (hh > 23 || mm > 59) return false;
+
+    out.hour = hh;
+    out.minute = mm;
+    return true;
+  }
+
+  void publishScheduleCfgRetained(uint8_t ch) {
+    if (ch >= 9) return;
+    if (_cfgScheduleTopic[ch + 1][0] == '\0') return;
+
+    const auto w = app::scheduler::events::window(ch);
+
+    char msg[96];
+    snprintf(msg, sizeof(msg),
+             "{\"ch\":%u,\"enabled\":%u,\"on\":%u,\"off\":%u}",
+             (unsigned)(ch + 1),
+             (unsigned)(w.enabled ? 1 : 0),
+             (unsigned)w.onMinute,
+             (unsigned)w.offMinute);
+
+    (void)hal::mqtt().publish(_cfgScheduleTopic[ch + 1], (const uint8_t*)msg, strlen(msg), true);
+  }
+
+  void publishAllSchedulesRetained() {
+    for (uint8_t ch = 0; ch < 9; ++ch) {
+      publishScheduleCfgRetained(ch);
+    }
+  }
+
+  void publishScheduleAck(bool ok, uint8_t ch) {
+    if (_ackScheduleTopic[0] == '\0') return;
+    char msg[64];
+    snprintf(msg, sizeof(msg),
+             "{\"ok\":%s,\"ch\":%u}",
+             ok ? "true" : "false",
+             (unsigned)(ch + 1));
+    (void)hal::mqtt().publish(_ackScheduleTopic, (const uint8_t*)msg, strlen(msg), false);
+  }
+
+  void handleScheduleCommand(uint8_t ch, const char* json) {
+    if (!json) return;
+
+    const auto cur = app::scheduler::events::window(ch);
+
+    bool hasOn = false;
+    bool hasOff = false;
+    bool hasEnabled = false;
+
+    app::scheduler::TimeHM onHm{};
+    app::scheduler::TimeHM offHm{};
+
+    char tmp[8];
+
+    if (jsonFindString(json, "on", tmp, sizeof(tmp))) {
+      hasOn = parseHHMM(tmp, onHm);
+    }
+    if (jsonFindString(json, "off", tmp, sizeof(tmp))) {
+      hasOff = parseHHMM(tmp, offHm);
+    }
+
+    bool enabled = cur.enabled;
+    if (jsonFindBool(json, "enabled", enabled)) {
+      hasEnabled = true;
+    }
+
+    if ((hasOn || hasOff) && !hasEnabled) {
+      enabled = true;
+    }
+
+    if (!hasOn) {
+      onHm.hour = (uint8_t)(cur.onMinute / 60u);
+      onHm.minute = (uint8_t)(cur.onMinute % 60u);
+    }
+    if (!hasOff) {
+      offHm.hour = (uint8_t)(cur.offMinute / 60u);
+      offHm.minute = (uint8_t)(cur.offMinute % 60u);
+    }
+
+    const bool ok = app::scheduler::events::setWindow(ch, onHm, offHm, enabled);
+    if (ok) {
+      publishScheduleCfgRetained(ch);
+    }
+    publishScheduleAck(ok, ch);
+  }
+
   static constexpr size_t RX_BUF_SIZE = 256;
   static constexpr size_t MAX_TOKENS  = 32;
 
   char _subTopic[128] = {0};
   char _pubTopic[128] = {0};
   char _cmdCfgTopic[96] = {0};
+
+  // C1.2 schedule cmd + cfg topics (índice 1..9)
+  char _cmdScheduleTopic[10][96] = {{0}};
+  char _cfgScheduleTopic[10][96] = {{0}};
+  char _ackScheduleTopic[96] = {0};
 
   uint32_t _lastReconnectMs = 0;
 

@@ -6,6 +6,7 @@
 #include "app/comms/ha/ha_discovery.h"
 #include "app/outlets/app_outlets.h"
 #include "app/scheduler/app_scheduler.h"
+#include "app/scheduler/app_event_scheduler.h"
 
 #include "hal/hal_mqtt.h"
 #include "hal/hal_network.h"
@@ -44,12 +45,23 @@ public:
                "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
     }
 
+    // C1.2: schedule cmd/config topics
+    for (int i = 1; i <= 9; i++) {
+      snprintf(_cmdScheduleTopic[i], sizeof(_cmdScheduleTopic[i]),
+               "%s/%s/cmd/schedule/%d", BASE_TOPIC, deviceId, i);
+      snprintf(_cfgScheduleTopic[i], sizeof(_cfgScheduleTopic[i]),
+               "%s/%s/cfg/schedule/%d", BASE_TOPIC, deviceId, i);
+    }
+    snprintf(_ackScheduleTopic, sizeof(_ackScheduleTopic),
+             "%s/%s/cfg/schedule/ack", BASE_TOPIC, deviceId);
+
     // Config admin topic
     snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic), "%s/%s/cmd/config", BASE_TOPIC, deviceId);
 
     _lastReconnectMs = millis();
     _lastStateMs = millis();
     _discoveryPublished = false;
+    _subscribed = false;
   }
 
   void loop() override {
@@ -60,6 +72,7 @@ public:
         _lastReconnectMs = now;
         (void)hal::mqtt().connect();
       }
+      _subscribed = false;
       return;
     }
 
@@ -75,6 +88,11 @@ public:
         (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
       }
 
+      // C1.2: schedule commands
+      for (int i = 1; i <= 9; i++) {
+        (void)hal::mqtt().subscribe(_cmdScheduleTopic[i]);
+      }
+
       // Discovery
       if (!_discoveryPublished) {
         app::ha::publishDiscoveryMinimal();
@@ -83,6 +101,9 @@ public:
 
       publishAvailability(true);
       publishStatePlaceholder();
+
+      // C1.2: publicar config schedule retenida para que HA/cliente lo vea tras reconnect
+      publishAllSchedulesRetained();
     }
 
     // publish periódico de estado (placeholder)
@@ -99,13 +120,13 @@ public:
   bool publishStatus(const char* key, const char* value, bool retained=false) override {
     if (!key || !value) return false;
 
-    char msg[180];
-    snprintf(msg, sizeof(msg), "{\"%s\":\"%s\"}", key, value);
+    char t[128];
+    snprintf(t, sizeof(t), "%s/%s/status/%s", BASE_TOPIC, app::cfg::get().mqtt.deviceId, key);
 
     return hal::mqtt().publish(
-      _stateTopic,
-      (const uint8_t*)msg,
-      strlen(msg),
+      t,
+      (const uint8_t*)value,
+      strlen(value),
       retained
     ) == hal::MqttError::Ok;
   }
@@ -123,7 +144,15 @@ public:
     memcpy(_rx, payload, n);
     _rx[n] = '\0';
 
-    // Outlets 1..9
+    // C1.2: schedule cmd (JSON)
+    for (int i = 1; i <= 9; i++) {
+      if (strcmp(topic, _cmdScheduleTopic[i]) == 0) {
+        handleScheduleCommand((uint8_t)(i - 1), _rx);
+        return;
+      }
+    }
+
+    // Outlets 1..9 (payload "0"/"1")
     for (int i = 1; i <= 9; i++) {
       if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
         const uint8_t v = (_rx[0] == '1') ? 1 : 0;
@@ -148,9 +177,159 @@ private:
     return (s == app::scheduler::TimeSource::Rtc) ? "rtc" : "millis";
   }
 
+  static bool jsonFindString(const char* json, const char* key, char* out, size_t outLen) {
+    if (!json || !key || !out || outLen == 0) return false;
+    out[0] = '\0';
+
+    char pat[24];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+
+    const char* p = strstr(json, pat);
+    if (!p) return false;
+    p = strchr(p, ':');
+    if (!p) return false;
+    p++;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '"') return false;
+    p++;
+
+    size_t i = 0;
+    while (*p && *p != '"' && i + 1 < outLen) {
+      out[i++] = *p++;
+    }
+    out[i] = '\0';
+    return (*p == '"');
+  }
+
+  static bool jsonFindBool(const char* json, const char* key, bool& out) {
+    if (!json || !key) return false;
+
+    char pat[24];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+
+    const char* p = strstr(json, pat);
+    if (!p) return false;
+    p = strchr(p, ':');
+    if (!p) return false;
+    p++;
+    while (*p == ' ' || *p == '\t') p++;
+
+    if (strncmp(p, "true", 4) == 0) {
+      out = true;
+      return true;
+    }
+    if (strncmp(p, "false", 5) == 0) {
+      out = false;
+      return true;
+    }
+    if (*p == '1') { out = true; return true; }
+    if (*p == '0') { out = false; return true; }
+    return false;
+  }
+
+  static bool parseHHMM(const char* s, app::scheduler::TimeHM& out) {
+    if (!s) return false;
+    // formato "HH:MM"
+    if (!(s[0] >= '0' && s[0] <= '9')) return false;
+    if (!(s[1] >= '0' && s[1] <= '9')) return false;
+    if (s[2] != ':') return false;
+    if (!(s[3] >= '0' && s[3] <= '9')) return false;
+    if (!(s[4] >= '0' && s[4] <= '9')) return false;
+
+    const uint8_t hh = (uint8_t)((s[0] - '0') * 10 + (s[1] - '0'));
+    const uint8_t mm = (uint8_t)((s[3] - '0') * 10 + (s[4] - '0'));
+    if (hh > 23 || mm > 59) return false;
+
+    out.hour = hh;
+    out.minute = mm;
+    return true;
+  }
+
   void publishAvailability(bool online) {
     const char* v = online ? "online" : "offline";
     (void)hal::mqtt().publish(_availTopic, (const uint8_t*)v, strlen(v), true);
+  }
+
+  void publishScheduleCfgRetained(uint8_t ch) {
+    if (ch >= 9) return;
+    const auto w = app::scheduler::events::window(ch);
+
+    char msg[96];
+    snprintf(msg, sizeof(msg),
+             "{\"ch\":%u,\"enabled\":%u,\"on\":%u,\"off\":%u}",
+             (unsigned)(ch + 1),
+             (unsigned)(w.enabled ? 1 : 0),
+             (unsigned)w.onMinute,
+             (unsigned)w.offMinute);
+
+    (void)hal::mqtt().publish(_cfgScheduleTopic[ch + 1], (const uint8_t*)msg, strlen(msg), true);
+  }
+
+  void publishAllSchedulesRetained() {
+    for (uint8_t ch = 0; ch < 9; ++ch) {
+      publishScheduleCfgRetained(ch);
+    }
+  }
+
+  void publishScheduleAck(bool ok, uint8_t ch) {
+    char msg[64];
+    snprintf(msg, sizeof(msg),
+             "{\"ok\":%s,\"ch\":%u}",
+             ok ? "true" : "false",
+             (unsigned)(ch + 1));
+    (void)hal::mqtt().publish(_ackScheduleTopic, (const uint8_t*)msg, strlen(msg), false);
+  }
+
+  void handleScheduleCommand(uint8_t ch, const char* json) {
+    // Payload esperado: {"on":"HH:MM","off":"HH:MM","enabled":true}
+    // Reglas:
+    // - si viene on/off y NO viene enabled => enabled=true
+    // - si falta on u off => mantener valor actual
+    if (!json) return;
+
+    const auto cur = app::scheduler::events::window(ch);
+
+    bool hasOn = false;
+    bool hasOff = false;
+    bool hasEnabled = false;
+
+    app::scheduler::TimeHM onHm{};
+    app::scheduler::TimeHM offHm{};
+
+    char tmp[8];
+
+    if (jsonFindString(json, "on", tmp, sizeof(tmp))) {
+      hasOn = parseHHMM(tmp, onHm);
+    }
+    if (jsonFindString(json, "off", tmp, sizeof(tmp))) {
+      hasOff = parseHHMM(tmp, offHm);
+    }
+
+    bool enabled = cur.enabled;
+    if (jsonFindBool(json, "enabled", enabled)) {
+      hasEnabled = true;
+    }
+
+    // si llegan horarios pero no enabled -> enabled=true
+    if ((hasOn || hasOff) && !hasEnabled) {
+      enabled = true;
+    }
+
+    // mantener valores actuales si no llega campo
+    if (!hasOn) {
+      onHm.hour = (uint8_t)(cur.onMinute / 60u);
+      onHm.minute = (uint8_t)(cur.onMinute % 60u);
+    }
+    if (!hasOff) {
+      offHm.hour = (uint8_t)(cur.offMinute / 60u);
+      offHm.minute = (uint8_t)(cur.offMinute % 60u);
+    }
+
+    const bool ok = app::scheduler::events::setWindow(ch, onHm, offHm, enabled);
+    if (ok) {
+      publishScheduleCfgRetained(ch);
+    }
+    publishScheduleAck(ok, ch);
   }
 
   void publishStatePlaceholder() {
@@ -162,77 +341,33 @@ private:
     const float water_ph   = 0.0f;
     const float reactor_ph = 0.0f;
     const float orp        = 0.0f;
-    const float salinity   = 0.0f;
 
-    const int led_white = 0;
-    const int led_blue  = 0;
-    const int led_rb    = 0;
-    const int led_red   = 0;
-    const int led_uv    = 0;
+    const app::scheduler::TimeHM now = app::scheduler::now();
+    const app::scheduler::TimeSource src = app::scheduler::timeSource();
 
-    const app::scheduler::TimeHM t = app::scheduler::now();
-    const uint16_t mod = app::scheduler::minuteOfDay();
-    const uint8_t tick = app::scheduler::minuteTick() ? 1 : 0; // peek
-    const char* src = sourceToStr(app::scheduler::timeSource());
-
-    char msg[740];
+    char msg[256];
     snprintf(msg, sizeof(msg),
-             "{"
-               "\"water_temperature\":%.2f,"
-               "\"heatsink_temperature\":%.2f,"
-               "\"ambient_temperature\":%.2f,"
-               "\"water_ph\":%.2f,"
-               "\"reactor_ph\":%.2f,"
-               "\"orp\":%.2f,"
-               "\"salinity\":%.3f,"
-               "\"led_white_power\":%d,"
-               "\"led_blue_power\":%d,"
-               "\"led_royal_blue_power\":%d,"
-               "\"led_red_power\":%d,"
-               "\"led_uv_power\":%d,"
-               "\"outlet_1\":%d,"
-               "\"outlet_2\":%d,"
-               "\"outlet_3\":%d,"
-               "\"outlet_4\":%d,"
-               "\"outlet_5\":%d,"
-               "\"outlet_6\":%d,"
-               "\"outlet_7\":%d,"
-               "\"outlet_8\":%d,"
-               "\"outlet_9\":%d,"
-               "\"uptime\":%lu,"
-               "\"clock_minute_of_day\":%u,"
-               "\"clock_hour\":%u,"
-               "\"clock_minute\":%u,"
-               "\"clock_tick\":%u,"
-               "\"clock_source\":\"%s\""
-             "}",
-             (double)water_temperature,
-             (double)heatsink_temperature,
-             (double)ambient_temperature,
-             (double)water_ph,
-             (double)reactor_ph,
-             (double)orp,
-             (double)salinity,
-             led_white,
-             led_blue,
-             led_rb,
-             led_red,
-             led_uv,
-             (int)app::outlets::get(0),
-             (int)app::outlets::get(1),
-             (int)app::outlets::get(2),
-             (int)app::outlets::get(3),
-             (int)app::outlets::get(4),
-             (int)app::outlets::get(5),
-             (int)app::outlets::get(6),
-             (int)app::outlets::get(7),
-             (int)app::outlets::get(8),
-             (unsigned long)(millis() / 1000UL),
-             (unsigned)mod,
-             (unsigned)t.hour,
-             (unsigned)t.minute,
-             (unsigned)tick,
-             src);
+      "{"
+        "\"water_temperature\":%.1f,"
+        "\"heatsink_temperature\":%.1f,"
+        "\"ambient_temperature\":%.1f,"
+        "\"water_ph\":%.2f,"
+        "\"reactor_ph\":%.2f,"
+        "\"orp\":%.0f,"
+        "\"clock_h\":%u,"
+        "\"clock_m\":%u,"
+        "\"clock_src\":\"%s\""
+      "}",
+      water_temperature,
+      heatsink_temperature,
+      ambient_temperature,
+      water_ph,
+      reactor_ph,
+      orp,
+      (unsigned)now.hour,
+      (unsigned)now.minute,
+      sourceToStr(src)
+    );
 
     (void)hal::mqtt().publish(_stateTopic, (const uint8_t*)msg, strlen(msg), false);
   }
@@ -249,9 +384,16 @@ private:
 
   // cmd topics outlets 1..9 (índice 1..9)
   char _cmdOutletTopic[10][96] = {{0}};
+
+  // C1.2 schedule cmd + cfg topics (índice 1..9)
+  char _cmdScheduleTopic[10][96] = {{0}};
+  char _cfgScheduleTopic[10][96] = {{0}};
+  char _ackScheduleTopic[96] = {0};
+
   char _cmdCfgTopic[96] = {0};
 
-  char _rx[32] = {0};
+  // rx small: schedule json is minimal; outlets are "0/1"
+  char _rx[64] = {0};
 };
 
 ICommsBackend& comms_ha_singleton() {

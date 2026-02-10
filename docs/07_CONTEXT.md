@@ -1,5 +1,28 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## C1.2 — Scheduler eventos: persistencia TLV + admin MQTT (HA/Legacy)
+
+- Se añade persistencia de ventanas ON/OFF del scheduler de eventos en `app::nvm::EepromRegistry` (TLV):
+  - Keys (dominio 3xx relays/outlets):
+    - `330`: `scheduler.events.valid` (bool)
+    - `331..339`: `scheduler.events.chN.enabled` (bool)
+    - `340..348`: `scheduler.events.chN.onMinute` (u32, 0..1439)
+    - `350..358`: `scheduler.events.chN.offMinute` (u32, 0..1439)
+  - `events::begin()` carga desde NVM si `valid=true`.
+  - `events::setWindow()` persiste cambios (commit agrupado con beginEdit/endEdit).
+
+- Se añade configuración por MQTT (sin ArduinoJson) en ambos backends:
+  - Cmd: `ferduino/<deviceId>/cmd/schedule/<N>` (N=1..9)
+  - Payload JSON: `{"on":"HH:MM","off":"HH:MM","enabled":true}`
+    - Si no viene `enabled` pero sí horarios → `enabled=true`
+    - Si falta `on` o `off` → se conserva el valor actual
+  - Retained cfg: `ferduino/<deviceId>/cfg/schedule/<N>`
+    - `{"ch":N,"enabled":0|1,"on":<min>,"off":<min>}`
+  - Ack: `ferduino/<deviceId>/cfg/schedule/ack` (no retained)
+    - `{"ok":true,"ch":N}`
+
+- Se actualiza `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md` con las nuevas keys.
+
 ## C1.1 — Scheduler de eventos (núcleo) + fix de compatibilidad con runtime/comms
 
 - Se corrige `app_scheduler.cpp` para que implemente exactamente la API declarada en `include/app/scheduler/app_scheduler.h`:
