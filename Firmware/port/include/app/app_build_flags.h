@@ -47,6 +47,11 @@
 #define APP_ENABLE_TELEMETRY_TEMPCTRL 1
 #endif
 
+// Alertas recurrentes (por ejemplo: outlets forzados fuera de AUTO)
+#ifndef APP_ENABLE_FORCED_OUTLET_ALERTS
+#define APP_ENABLE_FORCED_OUTLET_ALERTS 1
+#endif
+
 // Scheduler: 0 = millis() FAKE, 1 = RTC real (requiere hook app_scheduler_rtc_minute_of_day)
 #ifndef APP_SCHEDULER_USE_RTC
 #define APP_SCHEDULER_USE_RTC 0

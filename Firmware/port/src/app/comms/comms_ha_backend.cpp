@@ -3,6 +3,7 @@
 #include "app/config/app_config.h"
 #include "app/config/app_config_mqtt_admin.h"
 
+#include "app/alerts/forced_outlet_alert.h"
 #include "app/comms/ha/ha_discovery.h"
 #include "app/outlets/app_outlets.h"
 #include "app/scheduler/app_scheduler.h"
@@ -66,6 +67,22 @@ public:
     // Config admin topic
     snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic), "%s/%s/cmd/config", BASE_TOPIC, deviceId);
 
+    // Forced outlet alert reminder time
+    snprintf(_cmdForcedAlertTimeTopic, sizeof(_cmdForcedAlertTimeTopic),
+             "%s/%s/cmd/forced_alert_time", BASE_TOPIC, deviceId);
+    snprintf(_cfgForcedAlertTimeTopic, sizeof(_cfgForcedAlertTimeTopic),
+             "%s/%s/cfg/forced_alert_time", BASE_TOPIC, deviceId);
+    snprintf(_ackForcedAlertTimeTopic, sizeof(_ackForcedAlertTimeTopic),
+             "%s/%s/cfg/forced_alert_time/ack", BASE_TOPIC, deviceId);
+
+    // Forced outlet alert enable
+    snprintf(_cmdForcedAlertEnableTopic, sizeof(_cmdForcedAlertEnableTopic),
+             "%s/%s/cmd/forced_alert_enable", BASE_TOPIC, deviceId);
+    snprintf(_cfgForcedAlertEnableTopic, sizeof(_cfgForcedAlertEnableTopic),
+             "%s/%s/cfg/forced_alert_enable", BASE_TOPIC, deviceId);
+    snprintf(_ackForcedAlertEnableTopic, sizeof(_ackForcedAlertEnableTopic),
+             "%s/%s/cfg/forced_alert_enable/ack", BASE_TOPIC, deviceId);
+
     _lastReconnectMs = millis();
     _lastStateMs = millis();
     _discoveryPublished = false;
@@ -90,6 +107,10 @@ public:
 
       // Config admin
       (void)hal::mqtt().subscribe(_cmdCfgTopic);
+
+      // Forced alert cfg
+      (void)hal::mqtt().subscribe(_cmdForcedAlertTimeTopic);
+      (void)hal::mqtt().subscribe(_cmdForcedAlertEnableTopic);
 
       // Outlets (manual)
       for (int i = 1; i <= 9; i++) {
@@ -118,6 +139,10 @@ public:
       // Publicar cfg retained para schedule y outlet_auto
       publishAllSchedulesRetained();
       publishAllOutletAutoRetained();
+
+      // Publicar cfg retained forced alert
+      publishForcedAlertTimeCfgRetained();
+      publishForcedAlertEnableCfgRetained();
     }
 
     // publish periódico de estado (placeholder)
@@ -157,6 +182,18 @@ public:
     const size_t n = (len >= sizeof(_rx)) ? (sizeof(_rx) - 1) : len;
     memcpy(_rx, payload, n);
     _rx[n] = '\0';
+
+    // Forced alert time command
+    if (strcmp(topic, _cmdForcedAlertTimeTopic) == 0) {
+      handleForcedAlertTimeCommand(_rx);
+      return;
+    }
+
+    // Forced alert enable command
+    if (strcmp(topic, _cmdForcedAlertEnableTopic) == 0) {
+      handleForcedAlertEnableCommand(_rx);
+      return;
+    }
 
     // Schedule cmd (JSON)
     for (int i = 1; i <= 9; i++) {
@@ -269,6 +306,102 @@ private:
     out.hour = hh;
     out.minute = mm;
     return true;
+  }
+
+  void publishForcedAlertTimeCfgRetained() {
+    const auto t = app::alerts::forced_outlets::reminderTime();
+    char msg[8];
+    snprintf(msg, sizeof(msg), "%02u:%02u", (unsigned)t.hour, (unsigned)t.minute);
+    (void)hal::mqtt().publish(_cfgForcedAlertTimeTopic, (const uint8_t*)msg, strlen(msg), true);
+  }
+
+  void publishForcedAlertEnableCfgRetained() {
+    const bool en = app::alerts::forced_outlets::enabled();
+    const char* msg = en ? "1" : "0";
+    (void)hal::mqtt().publish(_cfgForcedAlertEnableTopic, (const uint8_t*)msg, strlen(msg), true);
+  }
+
+  void handleForcedAlertTimeCommand(const char* payload) {
+    if (!payload || payload[0] == '\0') return;
+
+    if (strcmp(payload, "get") == 0 || strcmp(payload, "GET") == 0 || strcmp(payload, "?") == 0) {
+      publishForcedAlertTimeCfgRetained();
+      (void)hal::mqtt().publish(_ackForcedAlertTimeTopic,
+                               (const uint8_t*)"{\"ok\":true,\"op\":\"get\"}",
+                               strlen("{\"ok\":true,\"op\":\"get\"}"),
+                               false);
+      return;
+    }
+
+    app::scheduler::TimeHM t{0,0};
+
+    // acepta JSON {"time":"HH:MM"} o raw "HH:MM"
+    char timeStr[8];
+    if (jsonFindString(payload, "time", timeStr, sizeof(timeStr))) {
+      if (!parseHHMM(timeStr, t)) {
+        (void)hal::mqtt().publish(_ackForcedAlertTimeTopic,
+                                 (const uint8_t*)"{\"ok\":false,\"err\":\"bad_time\"}",
+                                 strlen("{\"ok\":false,\"err\":\"bad_time\"}"),
+                                 false);
+        return;
+      }
+    } else {
+      if (!parseHHMM(payload, t)) {
+        (void)hal::mqtt().publish(_ackForcedAlertTimeTopic,
+                                 (const uint8_t*)"{\"ok\":false,\"err\":\"bad_time\"}",
+                                 strlen("{\"ok\":false,\"err\":\"bad_time\"}"),
+                                 false);
+        return;
+      }
+    }
+
+    app::alerts::forced_outlets::setReminderTime(t);
+    publishForcedAlertTimeCfgRetained();
+
+    (void)hal::mqtt().publish(_ackForcedAlertTimeTopic,
+                             (const uint8_t*)"{\"ok\":true,\"op\":\"set\"}",
+                             strlen("{\"ok\":true,\"op\":\"set\"}"),
+                             false);
+  }
+
+  void handleForcedAlertEnableCommand(const char* payload) {
+    if (!payload || payload[0] == '\0') return;
+
+    if (strcmp(payload, "get") == 0 || strcmp(payload, "GET") == 0 || strcmp(payload, "?") == 0) {
+      publishForcedAlertEnableCfgRetained();
+      (void)hal::mqtt().publish(_ackForcedAlertEnableTopic,
+                               (const uint8_t*)"{\"ok\":true,\"op\":\"get\"}",
+                               strlen("{\"ok\":true,\"op\":\"get\"}"),
+                               false);
+      return;
+    }
+
+    bool en = false;
+    bool ok = false;
+
+    if (jsonFindBool(payload, "enabled", en)) {
+      ok = true;
+    } else if (payload[0] == '1') {
+      en = true; ok = true;
+    } else if (payload[0] == '0') {
+      en = false; ok = true;
+    }
+
+    if (!ok) {
+      (void)hal::mqtt().publish(_ackForcedAlertEnableTopic,
+                               (const uint8_t*)"{\"ok\":false,\"err\":\"bad_enabled\"}",
+                               strlen("{\"ok\":false,\"err\":\"bad_enabled\"}"),
+                               false);
+      return;
+    }
+
+    app::alerts::forced_outlets::setEnabled(en);
+    publishForcedAlertEnableCfgRetained();
+
+    (void)hal::mqtt().publish(_ackForcedAlertEnableTopic,
+                             (const uint8_t*)"{\"ok\":true,\"op\":\"set\"}",
+                             strlen("{\"ok\":true,\"op\":\"set\"}"),
+                             false);
   }
 
   void publishAvailability(bool online) {
@@ -444,6 +577,15 @@ private:
   char _cfgOutletAutoTopic[10][96] = {{0}};
 
   char _cmdCfgTopic[96] = {0};
+
+  // forced alert cmd/cfg/ack topics
+  char _cmdForcedAlertTimeTopic[96] = {0};
+  char _cfgForcedAlertTimeTopic[96] = {0};
+  char _ackForcedAlertTimeTopic[96] = {0};
+
+  char _cmdForcedAlertEnableTopic[96] = {0};
+  char _cfgForcedAlertEnableTopic[96] = {0};
+  char _ackForcedAlertEnableTopic[96] = {0};
 
   // rx small: schedule json is minimal; outlets are "0/1"
   char _rx[96] = {0};

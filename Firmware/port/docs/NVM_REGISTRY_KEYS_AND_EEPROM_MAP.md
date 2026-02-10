@@ -1,4 +1,52 @@
-﻿# NVM Registry Keys and EEPROM Map
+﻿﻿#
+# NVM Registry Keys and EEPROM Map
+
+- Fecha: 2026-02-08
+- Commit: `b29ef64`
+- Alcance: documentación de `Firmware/port` + referencia read-only de `Firmware/Original`
+
+## Comandos usados durante el análisis
+
+## A) Overview (NVM architecture)
+
+## B) Tabla de FLAGS (registry)
+
+## C) Tabla de KEYS del registry (actuales)
+
+Estado real (repo port): hay varias keys ya en uso por módulos stub (outlets, scheduler, forced alerts, etc.). Mantener esta tabla como fuente de verdad.
+
+| Key ID (u16) | Nombre sugerido estable | Tipo TLV | Unidad/escala | Default/fallback | Consumidor (archivo + función) | Productor (archivo + función) | Notas |
+|---:|---|---|---|---|---|---|---|
+| `100` | `temp.water.set_x10` | `I32` | décimas °C (`x10`) | Si falla lectura legacy: `0` | Sin consumidor explícito aún en app/comms (pendiente B5/B6) | `Firmware/port/src/app/nvm/eeprom_migration.cpp` (`migrateLegacyIfNeeded` -> `reg.setI32`) | Valor viene de legacy `int16` en offset 482 |
+| `101` | `temp.water.off_x10` | `I32` | décimas °C (`x10`) | Si falla lectura legacy: `0` | Sin consumidor explícito aún en app/comms | `Firmware/port/src/app/nvm/eeprom_migration.cpp` (`migrateLegacyIfNeeded` -> `reg.setI32`) | Legacy original era `byte` (offset 484) y se normaliza a `I32` |
+| `102` | `temp.water.alarm_x10` | `I32` | décimas °C (`x10`) | Si falla lectura legacy: `0` | Sin consumidor explícito aún en app/comms | `Firmware/port/src/app/nvm/eeprom_migration.cpp` (`migrateLegacyIfNeeded` -> `reg.setI32`) | Legacy original era `byte` (offset 485) y se normaliza a `I32` |
+| `360` | `alerts.forced_outlets.reminder_minofday` | `U32` | minuto del día `0..1439` | `540` (09:00) | `Firmware/port/src/app/alerts/forced_outlet_alert.cpp` (`loop`) | `Firmware/port/src/app/alerts/forced_outlet_alert.cpp` (`setReminderTime` + `begin`) | Hora diaria para recordatorio si hay salidas en manual |
+| `361` | `alerts.forced_outlets.enabled` | `U8` (bool) | `0/1` | `1` | `Firmware/port/src/app/alerts/forced_outlet_alert.cpp` (`loop`) | `Firmware/port/src/app/alerts/forced_outlet_alert.cpp` (`setEnabled` + `begin`) | Permite desactivar recordatorios sin tocar auto/manual |
+
+Notas de implementación TLV actuales:
+
+- Tipos soportados: `U8/U16/U32/I32/Blob/Str` (`Firmware/port/include/app/nvm/eeprom_registry.h`).
+- `Str` guarda sin `\0`; longitud máxima actual: `255` bytes (`len` TLV es `u8`).
+- API `get*`/`set*` existe, pero fuera de migración todavía no hay uso sistemático de keys en módulos funcionales.
+
+## D) Mapa EEPROM legacy (Original)
+
+Fuente principal de offsets legacy:
+
+### D.1 Network/MQTT (host/port/user/apikey/deviceId)
+
+### D.2 Offsets relevantes (temperaturas, relés/salidas, dosing/schedules)
+
+## E) Tabla de equivalencias (Legacy -> Registry)
+
+## F) Reglas de asignación de keys (política futura)
+
+## G) Checklist de implementación
+
+## Top 10 keys que faltan (prioridad B5/B6)
+
+
+# NVM Registry Keys and EEPROM Map
 
 - Fecha: 2026-02-08
 - Commit: `b29ef64`

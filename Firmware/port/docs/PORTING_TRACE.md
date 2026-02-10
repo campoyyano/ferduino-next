@@ -1,3 +1,54 @@
+# Porting Trace — Ferduino (Original -> port/HAL)
+
+- Objetivo: trazar **qué funcionalidades** del Ferduino original han sido portadas al árbol `Firmware/port`, con:
+  - ubicación (archivo/módulo),
+  - estado (stub / parity / real HW),
+  - flags de compilación,
+  - telemetría/MQTT,
+  - y notas de paridad vs original.
+
+> Nota: este documento es **acumulativo**. Añadir entradas; no reescribir secciones antiguas.
+
+## Convenciones
+
+- **Estado**
+  - `STUB`: compila y ejecuta, pero no hace IO real.
+  - `PARITY`: lógica alineada con el original (o documentada), aún sin HW.
+  - `REAL`: usa HAL + HW real.
+- **Flags**
+  - `-D...` via `platformio.ini -> build_flags` para habilitar/deshabilitar módulos.
+- **MQTT**
+  - `retained`: `true/false`
+  - `topic`: forma del topic, con `<deviceId>` si aplica.
+
+## Entradas
+
+### C2.2 — Alertas por salida forzada (manual override)
+
+- **Funcionalidad**: si cualquier salida está en modo manual (`auto=false`), publicar aviso recurrente hasta volver a auto.
+- **Estado**: `STUB/PARITY` (no depende de HW; depende de `outlets::isAuto()`).
+- **Módulo port**:
+  - `include/app/alerts/forced_outlet_alert.h`
+  - `src/app/alerts/forced_outlet_alert.cpp`
+  - integrado en `src/app/runtime/app_runtime.cpp` (`begin/loop`)
+- **NVM registry keys**:
+  - `360` `alerts.forced_outlets.reminder_minofday` (`U32`) — minuto del día del recordatorio (default 09:00)
+  - `361` `alerts.forced_outlets.enabled` (`bool`) — enable/disable
+- **MQTT**
+  - topic: `ferduino/<deviceId>/alert/forced_outlets` (no retained)
+  - payload: `{"active":true|false,"mask":<u16>,"reason":"change|daily|disabled","minOfDay":<u16>}`
+- **Comandos HA backend**
+  - `ferduino/<deviceId>/cmd/forced_alert_time` payload `"HH:MM"` o `{"time":"HH:MM"}` o `"get"`
+  - `ferduino/<deviceId>/cfg/forced_alert_time` retained `"HH:MM"`
+  - `ferduino/<deviceId>/cfg/forced_alert_time/ack` no-retained `{"ok":...}`
+  - `ferduino/<deviceId>/cmd/forced_alert_enable` payload `"0"/"1"` o `{"enabled":true|false}` o `"get"`
+  - `ferduino/<deviceId>/cfg/forced_alert_enable` retained `"0"/"1"`
+  - `ferduino/<deviceId>/cfg/forced_alert_enable/ack` no-retained `{"ok":...}`
+- **Paridad vs original**
+  - Original: (pendiente de localizar en código legacy) — **no bloqueante** para la migración; la política de avisos diarios es decisión de producto del port.
+  - Riesgo: si el reloj fuente es `millis`, el “día” se deriva por wrap de `minuteOfDay`; con RTC real será estable.
+
+
 # PORTING_TRACE — Matriz de trazabilidad (Original → Port)
 
 Este documento registra, de forma auditable, qué partes del firmware original Ferduino

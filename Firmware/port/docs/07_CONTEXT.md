@@ -1,4 +1,160 @@
-# ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
+Portar el firmware original del Ferduino (Arduino Mega 2560) a una arquitectura
+moderna basada en HAL, manteniendo compatibilidad con el hardware original
+antes de migrar a otras plataformas (Giga, ESP, etc).
+
+La prioridad actual es:
+1. Que compile
+2. Que funcione en el hardware original
+3. Que la abstracción HAL sea limpia y extensible
+
+---
+
+## Hardware actual objetivo
+- Board principal: **Arduino Mega 2560**
+- IO Expander: **PCF8575**
+- RTC original: **DS1307**
+- RTC alternativo soportado: **DS3231**
+- LEDs PWM directos desde el Mega
+- Relés controlados vía PCF8575
+
+---
+
+## Decisiones de diseño importantes
+
+### HAL
+- Todo acceso a hardware pasa por HAL
+- No se accede directamente a Wire / digitalWrite / pinMode desde la app
+- HAL es C++ ligero, sin dependencias innecesarias
+
+### IO Expander
+- Se usa un HAL genérico (`IoExpander`) con:
+  - Dirección configurable
+  - Soporte ACTIVE_LOW
+  - Shadow register interno
+- Implementación basada en I2C puro (no dependencia directa de librerías externas)
+
+### RTC
+- HAL RTC soporta **DS1307 y DS3231**
+- API unificada (`FechaHora`)
+- Selección por disponibilidad en runtime
+- RTC ya compilando correctamente
+
+---
+
+## Estado actual (cerrado)
+
+### HAL completados
+- hal_gpio
+- hal_time
+- hal_i2c
+- hal_pwm
+- hal_ioexpander (PCF8575)
+- hal_rtc (DS1307 + DS3231)
+
+### Smoke tests existentes y compilando
+- app_gpio_smoketest
+- app_ferduino_pins_smoketest
+- app_ioexpander_smoketest
+- app_pwm_leds_smoketest
+- app_rtc_smoketest
+
+---
+
+## Pendiente / siguientes pasos
+
+### HAL pendientes
+- hal_relay (encima de IoExpander)
+- hal_network (Ethernet / MQTT) – NO prioritario aún
+
+### A corto plazo
+1. Implementar `hal_relay`
+2. Smoke test de relés
+3. Validar en hardware real (Mega original)
+4. Limpieza final de includes y dependencias
+
+---
+
+## Notas importantes
+- El repositorio es la fuente de verdad
+- No se deben subir ZIPs ni `.pio`
+- Archivos grandes NUNCA al repo (GitHub limit)
+
+---
+
+## C2.2 — Alertas MQTT por salidas forzadas (manual override) + configuración persistente
+
+- Se añade módulo `app/alerts/forced_outlet_alert`:
+  - Publica aviso inmediato cuando cambia el estado “forzado” (cualquier canal con `auto=false`)
+  - Publica recordatorio diario a una hora configurable mientras exista alguna salida en manual
+  - Publica aviso de “disabled” si se deshabilita el feature mientras estaba activo
+- Persistencia NVM (registry TLV):
+  - Key `360` (`U32`): `alerts.forced_outlets.reminder_minofday` (0..1439), default 09:00
+  - Key `361` (`bool`): `alerts.forced_outlets.enabled`, default `true`
+- MQTT alert:
+  - Topic: `ferduino/<deviceId>/alert/forced_outlets` (no retained)
+  - Payload: `{"active":true|false,"mask":<u16>,"reason":"change|daily|disabled","minOfDay":<u16>}`
+- Integración runtime:
+  - `app::alerts::forced_outlets::begin()` en `app_runtime.cpp::begin()`
+  - `app::alerts::forced_outlets::loop()` en `app_runtime.cpp::loop()`
+- Integración HA backend (comms_ha_backend):
+  - `cmd/forced_alert_time` + `cfg/forced_alert_time` (retained) + `ack`
+    - payload `"HH:MM"` o `{"time":"HH:MM"}` o `"get"`
+  - `cmd/forced_alert_enable` + `cfg/forced_alert_enable` (retained) + `ack`
+    - payload `"0"/"1"` o `{"enabled":true|false}` o `"get"`
+- Documentación:
+  - `docs/NVM_REGISTRY_KEYS_AND_EEPROM_MAP.md` actualiza tabla keys con 360/361
+  - Nuevo `docs/PORTING_TRACE.md` (acumulativo) para trazabilidad del port
+
+
+## C2.2b — Alertas MQTT por salidas en MANUAL (forzadas) con hora diaria + enable persistido
+
+- Se amplía el módulo `app/alerts/forced_outlet_alert`:
+  - Persistencia en NVM:
+    - Key `360`: `alerts.forced_outlets.reminder_min_of_day` (minuto del día, default 09:00)
+    - Key `361`: `alerts.forced_outlets.enabled` (bool, default true)
+  - Si `enabled=false`, no se envían recordatorios ni cambios; si antes estaba activo, publica una vez `active=false` con `reason="disabled"`.
+
+- Se amplía `CommsHABackend` con control por MQTT:
+  - Hora recordatorio:
+    - `ferduino/<deviceId>/cmd/forced_alert_time` payload:
+      - `"get"` -> publica cfg retained
+      - `"HH:MM"` o `{"time":"HH:MM"}` -> set
+    - `ferduino/<deviceId>/cfg/forced_alert_time` (retained) -> `"HH:MM"`
+    - `ferduino/<deviceId>/cfg/forced_alert_time/ack` -> JSON ok/err
+  - Enable recordatorio:
+    - `ferduino/<deviceId>/cmd/forced_alert_enable` payload:
+      - `"get"` -> publica cfg retained
+      - `"0"/"1"` o `{"enabled":true|false}` -> set
+    - `ferduino/<deviceId>/cfg/forced_alert_enable` (retained) -> `"0"`/`"1"`
+    - `ferduino/<deviceId>/cfg/forced_alert_enable/ack` -> JSON ok/err
+
+- Telemetría (no retained):
+  - Topic: `ferduino/<deviceId>/alert/forced_outlets`
+  - Payload JSON: `{"active":true|false,"mask":<u16>,"reason":"change|daily|disabled","minOfDay":<u16>}`
+
+
+## C2.2 — Alertas MQTT de outlets forzados (override manual)
+
+- Se añade módulo `app/alerts/forced_outlet_alert`.
+- Objetivo operativo: **si cualquier salida NO está en AUTO**, publicar un aviso MQTT recurrente para evitar olvidos.
+- Publicación MQTT:
+  - Topic: `ferduino/<deviceId>/alert/forced_outlets` (no retained)
+  - Payload: JSON `{ active, reason, mask, forced:[{idx,state}] }`
+    - `reason`: `change` (cambio inmediato) o `daily` (recordatorio diario)
+    - `idx`: 1..9
+    - `state`: 0/1
+- Recordatorio diario configurable:
+  - Persistencia NVM (registry TLV): key `360` (`outlet.forced_alert.minute_of_day`, U32, `0..1439`)
+  - Default: `09:00` (540)
+  - Comando MQTT para set/get:
+    - `ferduino/<deviceId>/cmd/forced_alert_time`
+      - Payload: `get` o `HH:MM` o `{"time":"HH:MM"}`
+    - Publicación de config (retained): `ferduino/<deviceId>/cfg/forced_alert_time`
+    - ACK: `ferduino/<deviceId>/cfg/forced_alert_time/ack`
+- Integración en runtime:
+  - `app::alerts::forced_outlets::begin/loop`
+  - Flag: `APP_ENABLE_FORCED_OUTLET_ALERTS` (default 1)
+
 
 ## C2.1c-fix — Corrección de build por implementación accidental en header
 
