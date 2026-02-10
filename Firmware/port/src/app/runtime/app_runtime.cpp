@@ -11,6 +11,7 @@
 #include "app/runtime/app_status.h"
 #include "app/runtime/app_info.h"
 #include "app/runtime/app_telemetry.h"
+#include "app/runtime/app_tempctrl_telemetry.h"
 
 #include "app/outlets/app_outlets.h"
 #include "app/scheduler/app_scheduler.h"
@@ -46,7 +47,7 @@ void begin() {
   if (g_started) return;
   g_started = true;
 
-  Serial.println("=== ferduino-next runtime (B5.4..B5.7) ===");
+  Serial.println("=== ferduino-next runtime ===");
 
   if (!app::nvm::registry().begin()) {
     Serial.println("[runtime] WARN: NVM registry begin() failed");
@@ -59,19 +60,19 @@ void begin() {
     Serial.println("[runtime] WARN: cfg load failed; using defaults in RAM");
   }
 
-  // B6.2a: Scheduler base (FAKE millis por defecto; RTC por flag+hook)
+  // Scheduler base (FAKE millis por defecto; RTC por flag+hook)
   app::scheduler::begin();
 
-  // C1.1: Motor de eventos (ventanas ON/OFF) — solo calcula estado deseado
+  // Motor de eventos (ventanas ON/OFF)
   app::scheduler::events::begin();
 
-  // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
+  // Outlets (RAM + registry TLV). En modo stub por defecto.
   app::outlets::begin();
 
-  // B6.1a: Sensores (FAKE por defecto)
+  // Sensores (FAKE por defecto)
   app::sensors::begin();
 
-  // C2.1: Control de temperatura (lógica; GPIO real opcional por flag)
+  // Control de temperatura (lógica; GPIO real opcional por flag)
   app::tempctrl::begin();
 
   const auto& cfg = app::cfg::get();
@@ -90,16 +91,16 @@ void begin() {
 void loop() {
   if (!g_started) begin();
 
-  // B6.2a: tick scheduler
+  // Tick scheduler
   app::scheduler::loop();
 
-  // C1.1: tick motor de eventos (reacciona al cambio de minuto)
+  // Tick motor de eventos
   app::scheduler::events::loop();
 
-  // B6.1a: tick sensores
+  // Tick sensores
   app::sensors::loop();
 
-  // C2.1: tick control temperatura
+  // Tick control temperatura
   app::tempctrl::loop();
 
   hal::network().loop();
@@ -113,8 +114,11 @@ void loop() {
   }
   g_prevMqttConnected = nowConn;
 
-  // Telemetría mínima (cada 30s)
+  // Telemetría mínima existente (cada 30s)
   app::runtime::telemetryLoop(30);
+
+  // NUEVO: telemetría tempctrl (cada 10s)
+  app::runtime::tempctrlTelemetryLoop(10);
 }
 
 } // namespace app::runtime

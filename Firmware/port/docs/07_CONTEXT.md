@@ -1,5 +1,26 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## C2.1b — PORTING_TRACE y flags de habilitación
+
+- Se crea `docs/PORTING_TRACE.md` como matriz de trazabilidad Original → Port:
+  - Registra origen/destino, inputs/outputs, NVM keys, topics MQTT/HA y diferencias de comportamiento.
+  - Incluye explícitamente flags de habilitación por módulo (debug/testing) y flags de backend FAKE/REAL.
+- Política nueva:
+  - Toda unidad portadas llevará comentarios `[PORT]` en el código con src/dst/nvm/mqtt/flags/diffs.
+- Decisión de documentación:
+  - Se recomienda que el contexto operativo (`07_CONTEXT.md`) sea canónico dentro de `port/docs/` para auditoría y consistencia.
+
+
+## C2.1b — Telemetría MQTT tempctrl + trazabilidad de port
+
+- Se añade telemetría MQTT para el control de temperatura (`tempctrl`):
+  - Topic: `ferduino/<deviceId>/telemetry/tempctrl` (no retained)
+  - Payload: JSON con `water_x10`, `set/off/alarm_x10`, `heater_on`, `chiller_on`, `alarm_active`, `valid`
+  - Periodo actual: 10s (en `app_runtime.cpp`)
+- Se crea documento de trazabilidad del port:
+  - `docs/PORTING_TRACE.md` (matriz Original → Port)
+  - Se adopta convención de comentarios `[PORT]` en el código para auditoría automática.
+
 ## C2.1 — Fix integración temp_control con sensores actuales
 
 - Se corrige `app/temp_control` para adaptarse a la API real de `app::sensors::Temperatures`:
