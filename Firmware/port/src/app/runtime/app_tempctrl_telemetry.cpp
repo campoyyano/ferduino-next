@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "app/app_build_flags.h"
 #include "app/config/app_config.h"
 #include "app/temp_control/temp_control.h"
 #include "hal/hal_mqtt.h"
@@ -13,6 +14,10 @@ namespace app::runtime {
 static uint32_t g_lastMs = 0;
 
 void tempctrlTelemetryLoop(uint32_t everySeconds) {
+#if !APP_ENABLE_TELEMETRY_TEMPCTRL
+  (void)everySeconds;
+  return;
+#endif
   if (everySeconds == 0) return;
   if (!hal::mqtt().connected()) return;
 

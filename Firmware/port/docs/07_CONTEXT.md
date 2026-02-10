@@ -1,5 +1,70 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
 
+## C2.1c-fix — Corrección de build por implementación accidental en header
+
+- Se corrige un error de compilación causado por definir `begin()/loop()` y `static` dentro de `include/app/runtime/app_runtime.h`.
+- `app_runtime.h` vuelve a ser **solo declaraciones**, evitando:
+  - include recursivo
+  - redefiniciones de variables
+  - definiciones duplicadas de `loop()`
+- `app_runtime.cpp` contiene la implementación completa y aplica enable flags para aislar módulos (debug/testing).
+
+
+## C2.1c — Cierre de paridad de comportamiento (Temp Control) + enable flags
+
+- Se localiza y referencia el origen exacto del control térmico en el firmware original:
+  - `Ferduino_Aquarium_Controller/src/Modules/Parametros.h::checkTempC()`
+- Se cierra la paridad clave heater/chiller:
+  - Overrides manuales `outlets[0]` (heater) y `outlets[1]` (chiller) con 3 estados:
+    - `0=AUTO`, `1=FORZADO ON`, `2=FORZADO OFF`
+  - En el port se mapea a `app::outlets` (idx 0..1):
+    - `auto=1 => AUTO`
+    - `auto=0 + state=1 => FORZADO ON`
+    - `auto=0 + state=0 => FORZADO OFF`
+  - Se emula `outlets_changed[]` detectando cambios de modo (AUTO/ON/OFF) en cada loop:
+    - si cambia el modo, ese canal se fuerza OFF en ese ciclo (equivalente al LOW inmediato del original)
+  - Exclusión mutua + safety cut aplican solo en AUTO (igual que el original)
+- Se añaden enable flags (ON/OFF por módulo) en `include/app/app_build_flags.h` y se integran en runtime:
+  - `APP_ENABLE_SCHEDULER`, `APP_ENABLE_EVENTS_SCHEDULER`, `APP_ENABLE_OUTLETS`,
+    `APP_ENABLE_SENSORS`, `APP_ENABLE_TEMPCTRL`, `APP_ENABLE_TELEMETRY`,
+    `APP_ENABLE_TELEMETRY_TEMPS`, `APP_ENABLE_TELEMETRY_TEMPCTRL`
+- Se actualiza trazabilidad:
+  - `docs/PORTING_TRACE.md`: C2.1 pasa a ✅ y se documenta el mapping a outlets idx 0..1 (fan control no portado)
+
+
+## C2.1c — Telemetría control de temperatura (debug)
+
+- Se añade telemetría MQTT del estado del módulo `app/temp_control`.
+- Objetivo: validar comportamiento del control térmico sin hardware.
+
+**Topic**
+- `ferduino/<deviceId>/telemetry/tempctrl` (no retained)
+
+**Payload (JSON, valores en x10)**
+- water_x10
+- set_x10
+- off_x10
+- alarm_x10
+- heater_on
+- chiller_on
+- alarm_active
+- valid
+
+**Flags**
+- Enable: `APP_ENABLE_TELEMETRY_TEMPCTRL`
+- Backend hardware:
+  - `APP_TEMPCTRL_USE_GPIO` (0 = cálculo solo, 1 = GPIO real)
+
+**Dependencias**
+- `app/sensors`
+- `app/temp_control`
+- `app/runtime`
+
+**Impacto**
+- Sin hardware requerido
+- Permite comparar comportamiento con firmware original durante el port
+
+
 ## C2.1b — PORTING_TRACE y flags de habilitación
 
 - Se crea `docs/PORTING_TRACE.md` como matriz de trazabilidad Original → Port:

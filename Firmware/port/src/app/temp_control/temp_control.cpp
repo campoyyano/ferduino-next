@@ -4,12 +4,36 @@
 
 #include "app/app_build_flags.h"
 #include "app/nvm/eeprom_registry.h"
+#include "app/outlets/app_outlets.h"
 #include "app/sensors/sensors.h"
 
 #include "hal/hal_gpio.h"
 #include "pins/pins_ferduino_mega2560.h"
 
 namespace app::tempctrl {
+
+// [PORT] src: Ferduino_Aquarium_Controller/src/Modules/Parametros.h::checkTempC()
+// [PORT] dst: port/src/app/temp_control/temp_control.cpp::loop()
+// [PORT] behavior: control heater/chiller con banda muerta + alarma + safety cut
+// [PORT] diffs: averaging 12x DS18B20 se delega a app/sensors; fan control NO portado
+// [PORT] nvm: keys 100..102 (set/off/alarm) x10
+// [PORT] mqtt: telemetry/tempctrl (debug)
+// [PORT] flags: APP_ENABLE_TEMPCTRL, APP_TEMPCTRL_USE_GPIO
+
+enum class OutletMode : uint8_t {
+  Auto = 0,
+  On   = 1,
+  Off  = 2,
+};
+
+static OutletMode currentMode(uint8_t idx) {
+  if (app::outlets::isAuto(idx)) return OutletMode::Auto;
+  return app::outlets::get(idx) ? OutletMode::On : OutletMode::Off;
+}
+
+static bool isForced(OutletMode m) {
+  return m != OutletMode::Auto;
+}
 
 // TLV keys (ya documentadas y migradas desde legacy)
 static constexpr uint16_t kKeySetX10   = 100;
@@ -75,8 +99,15 @@ static void applyOutputs(bool heaterOn, bool chillerOn) {
 }
 
 void begin() {
+#if !APP_ENABLE_TEMPCTRL
   g_state = State{};
   g_lastRunMs = 0;
+  return;
+#endif
+
+  g_state = State{};
+  g_lastRunMs = 0;
+  // Inicializamos tracking de cambios en loop() via estáticos.
 
   g_state.cfg = loadCfg();
 
@@ -88,6 +119,10 @@ void begin() {
 }
 
 void loop() {
+#if !APP_ENABLE_TEMPCTRL
+  return;
+#endif
+
   const uint32_t now = millis();
   if (now - g_lastRunMs < kControlPeriodMs) return;
   g_lastRunMs = now;
@@ -125,40 +160,80 @@ void loop() {
     g_state.alarm_active = false;
   }
 
-  // Control principal: banda muerta set ± off
   bool heater = g_state.heater_on;
   bool chiller = g_state.chiller_on;
 
-  // Dentro de banda muerta => ambos OFF
-  if ((t < (int16_t)(set + off)) && (t > (int16_t)(set - off))) {
+  // Mapeo paridad con original:
+  // - outlets[0] controla heater (Auto/On/Off)
+  // - outlets[1] controla chiller (Auto/On/Off)
+  const OutletMode heaterMode = currentMode(0);
+  const OutletMode chillerMode = currentMode(1);
+
+  // Emulación de outlets_changed[]: si el modo cambió desde el último loop,
+  // el original hacía un LOW inmediato y limpiaba el bit de estado.
+  // Aquí: forzamos estado OFF en este ciclo para el canal que cambió,
+  // manteniendo el resto de lógica para el siguiente tick.
+  static OutletMode prevHeaterMode = OutletMode::Auto;
+  static OutletMode prevChillerMode = OutletMode::Auto;
+
+  const bool heaterChanged = (heaterMode != prevHeaterMode);
+  const bool chillerChanged = (chillerMode != prevChillerMode);
+  prevHeaterMode = heaterMode;
+  prevChillerMode = chillerMode;
+
+  if (heaterChanged) {
     heater = false;
+  }
+  if (chillerChanged) {
     chiller = false;
-  } else {
-    // Fuera de banda -> actuar
-    if (off > 0) {
-      if (t > (int16_t)(set + off)) {
-        chiller = true;
+  }
+
+  // AUTO branch: solo si ambos están en Auto (igual que el original)
+  if (!isForced(heaterMode) && !isForced(chillerMode)) {
+    // Dentro de banda muerta => ambos OFF
+    if ((t < (int16_t)(set + off)) && (t > (int16_t)(set - off))) {
+      heater = false;
+      chiller = false;
+    } else {
+      // Fuera de banda -> actuar
+      if (off > 0) {
+        if (t > (int16_t)(set + off)) {
+          chiller = true;
+          heater = false;
+        }
+        if (t < (int16_t)(set - off)) {
+          heater = true;
+          chiller = false;
+        }
+      } else {
         heater = false;
-      }
-      if (t < (int16_t)(set - off)) {
-        heater = true;
         chiller = false;
       }
-    } else {
+    }
+
+    // Safety hard-cut (solo auto, como el original)
+    if (t > kMaxSafeC_x10 || t < kMinSafeC_x10) {
+      heater = false;
+      chiller = false;
+    }
+
+    // Evitar ambos ON simultáneamente (solo auto, como el original)
+    if (heater && chiller) {
       heater = false;
       chiller = false;
     }
   }
 
-  // Safety hard-cut
-  if (t > kMaxSafeC_x10 || t < kMinSafeC_x10) {
+  // Manual overrides (como el original, aplican siempre)
+  if (heaterMode == OutletMode::On) {
+    heater = true;
+  } else if (heaterMode == OutletMode::Off) {
     heater = false;
-    chiller = false;
   }
 
-  // Evitar ambos ON simultáneamente
-  if (heater && chiller) {
-    heater = false;
+  if (chillerMode == OutletMode::On) {
+    chiller = true;
+  } else if (chillerMode == OutletMode::Off) {
     chiller = false;
   }
 

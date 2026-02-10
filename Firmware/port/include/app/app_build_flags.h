@@ -10,6 +10,43 @@
 // - 1 => backend REAL (hardware), detrás de HAL o hooks estrechos
 // ============================================================
 
+// ============================================================
+// Flags de habilitación (enable)
+// Permiten aislar módulos para debug/testing sin tocar código.
+// ============================================================
+
+#ifndef APP_ENABLE_SCHEDULER
+#define APP_ENABLE_SCHEDULER 1
+#endif
+
+#ifndef APP_ENABLE_EVENTS_SCHEDULER
+#define APP_ENABLE_EVENTS_SCHEDULER 1
+#endif
+
+#ifndef APP_ENABLE_OUTLETS
+#define APP_ENABLE_OUTLETS 1
+#endif
+
+#ifndef APP_ENABLE_SENSORS
+#define APP_ENABLE_SENSORS 1
+#endif
+
+#ifndef APP_ENABLE_TEMPCTRL
+#define APP_ENABLE_TEMPCTRL 1
+#endif
+
+#ifndef APP_ENABLE_TELEMETRY
+#define APP_ENABLE_TELEMETRY 1
+#endif
+
+#ifndef APP_ENABLE_TELEMETRY_TEMPS
+#define APP_ENABLE_TELEMETRY_TEMPS 1
+#endif
+
+#ifndef APP_ENABLE_TELEMETRY_TEMPCTRL
+#define APP_ENABLE_TELEMETRY_TEMPCTRL 1
+#endif
+
 // Scheduler: 0 = millis() FAKE, 1 = RTC real (requiere hook app_scheduler_rtc_minute_of_day)
 #ifndef APP_SCHEDULER_USE_RTC
 #define APP_SCHEDULER_USE_RTC 0

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "app/app_build_flags.h"
 #include "app/config/app_config.h"
 #include "app/comms_backend.h"
 
@@ -60,20 +61,25 @@ void begin() {
     Serial.println("[runtime] WARN: cfg load failed; using defaults in RAM");
   }
 
-  // Scheduler base (FAKE millis por defecto; RTC por flag+hook)
+#if APP_ENABLE_SCHEDULER
   app::scheduler::begin();
+#endif
 
-  // Motor de eventos (ventanas ON/OFF)
+#if APP_ENABLE_EVENTS_SCHEDULER
   app::scheduler::events::begin();
+#endif
 
-  // Outlets (RAM + registry TLV). En modo stub por defecto.
+#if APP_ENABLE_OUTLETS
   app::outlets::begin();
+#endif
 
-  // Sensores (FAKE por defecto)
+#if APP_ENABLE_SENSORS
   app::sensors::begin();
+#endif
 
-  // Control de temperatura (lógica; GPIO real opcional por flag)
+#if APP_ENABLE_TEMPCTRL
   app::tempctrl::begin();
+#endif
 
   const auto& cfg = app::cfg::get();
   const hal::NetworkConfig net = toHalNetCfg(cfg.net);
@@ -84,41 +90,45 @@ void begin() {
   }
 
   app::comms().begin();
-
   g_prevMqttConnected = false;
 }
 
 void loop() {
   if (!g_started) begin();
 
-  // Tick scheduler
+#if APP_ENABLE_SCHEDULER
   app::scheduler::loop();
+#endif
 
-  // Tick motor de eventos
+#if APP_ENABLE_EVENTS_SCHEDULER
   app::scheduler::events::loop();
+#endif
 
-  // Tick sensores
+#if APP_ENABLE_SENSORS
   app::sensors::loop();
+#endif
 
-  // Tick control temperatura
+#if APP_ENABLE_TEMPCTRL
   app::tempctrl::loop();
+#endif
 
   hal::network().loop();
   app::comms().loop();
 
   const bool nowConn = hal::mqtt().connected();
   if (nowConn && !g_prevMqttConnected) {
-    // Flanco de conexión: retained status + retained info
     app::runtime::publishStatusRetained();
     app::runtime::publishInfoRetained();
   }
   g_prevMqttConnected = nowConn;
 
-  // Telemetría mínima existente (cada 30s)
+#if APP_ENABLE_TELEMETRY
   app::runtime::telemetryLoop(30);
+#endif
 
-  // NUEVO: telemetría tempctrl (cada 10s)
+#if APP_ENABLE_TELEMETRY_TEMPCTRL
   app::runtime::tempctrlTelemetryLoop(10);
+#endif
 }
 
 } // namespace app::runtime
