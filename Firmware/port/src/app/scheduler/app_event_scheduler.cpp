@@ -31,18 +31,10 @@ static uint16_t hmToMinute(app::scheduler::TimeHM t) {
   return (uint16_t)(h * 60u + m);
 }
 
-static app::scheduler::TimeHM minuteToHM(uint16_t minuteOfDay) {
-  app::scheduler::TimeHM t{};
-  const uint16_t m = clampMinute(minuteOfDay);
-  t.hour = (uint8_t)(m / 60u);
-  t.minute = (uint8_t)(m % 60u);
-  return t;
-}
-
 bool computeDesired(const Window& w, uint16_t minuteOfDay) {
   if (!w.enabled) return false;
 
-  const uint16_t on = clampMinute(w.onMinute);
+  const uint16_t on  = clampMinute(w.onMinute);
   const uint16_t off = clampMinute(w.offMinute);
   const uint16_t now = clampMinute(minuteOfDay);
 
@@ -65,7 +57,8 @@ static void applyDesiredInitial() {
   for (uint8_t ch = 0; ch < kMaxChannels; ++ch) {
     const bool want = computeDesired(g_windows[ch], nowMin);
     g_desired[ch] = want ? 1u : 0u;
-    g_changed[ch] = 1u; // forzar "primera aplicación" (útil cuando C2 conecte a outlets)
+    // Forzar changed para que C2 pueda aplicar en el primer loop
+    g_changed[ch] = 1u;
   }
 }
 
@@ -151,17 +144,15 @@ bool setWindow(uint8_t channel, app::scheduler::TimeHM on, app::scheduler::TimeH
   // Persistir el canal (C1.2)
   persistChannel(channel);
 
-  // Re-evaluación inmediata (sin depender del tick) para que el usuario vea el efecto.
+  // Re-evaluación inmediata para que el usuario vea el efecto.
   const uint16_t nowMin = app::scheduler::minuteOfDay();
   const bool want = computeDesired(w, nowMin);
   const uint8_t wantU8 = want ? 1u : 0u;
   if (wantU8 != g_desired[channel]) {
     g_desired[channel] = wantU8;
-    g_changed[channel] = 1u;
-  } else {
-    // aunque no cambie desired, marcamos changed para permitir "apply" al actualizar config
-    g_changed[channel] = 1u;
   }
+  // Marcamos changed siempre en setWindow para permitir aplicar en runtime.
+  g_changed[channel] = 1u;
 
   return true;
 }

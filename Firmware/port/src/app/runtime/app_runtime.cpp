@@ -87,6 +87,14 @@ void loop() {
   // C1.1: tick motor de eventos (reacciona al cambio de minuto)
   app::scheduler::events::loop();
 
+  // C2: aplicar estado deseado del scheduler SOLO a outlets en modo auto
+  // (manual commands deshabilitan auto en app::outlets::set)
+  for (uint8_t ch = 0; ch < app::outlets::count(); ++ch) {
+    if (app::scheduler::events::consumeDesiredChanged(ch)) {
+      (void)app::outlets::applyDesiredIfAuto(ch, app::scheduler::events::desiredOn(ch));
+    }
+  }
+
   hal::network().loop();
   app::comms().loop();
 

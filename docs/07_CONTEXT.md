@@ -1,4 +1,32 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
+## C2 — Limpieza de duplicados de headers
+
+- Se elimina duplicidad detectada de `app_outlets.h` para evitar ambigüedad de include paths en PlatformIO:
+  - Se mantiene como fuente única: `include/app/outlets/app_outlets.h`
+  - Se elimina: `src/app/outlets/app_outlets.h`
+- Esto evita “bugs fantasma” cuando dos headers con el mismo nombre divergen y el compilador incluye uno u otro según orden de rutas.
+
+
+## C1.2 + C2 — Schedule persistente + arbitraje Auto/Manual aplicado a Outlets
+
+- Se añade persistencia TLV del motor de eventos (scheduler windows):
+  - Keys: `330 scheduler.events.valid`
+  - `331..339` enabled por canal
+  - `340..348` onMinute por canal (U32)
+  - `350..358` offMinute por canal (U32)
+- Se añade comando MQTT HA backend para configurar schedule por canal:
+  - Topic: `ferduino/<deviceId>/cmd/schedule/<1..9>`
+  - Payload JSON minimal: `{"enabled":1,"on":"HH:MM","off":"HH:MM"}` (campos opcionales)
+- Se implementa arbitraje Auto/Manual en outlets:
+  - Manual (`cmd/outlet/<n>`) fuerza `auto=false` para ese canal
+  - Schedule `enabled=true` fuerza `auto=true`
+  - Schedule `enabled=false` explícito fuerza `auto=false`
+  - Persistencia auto por canal en TLV:
+    - `320 outlet.mode_block_valid`
+    - `321..329 outlet.N.auto`
+- Integración en runtime:
+  - Se aplica `desiredOn` del scheduler a cada outlet **solo si** está en modo auto.
+  - No hay sobrescritura del usuario cuando el canal está en manual.
 
 ## C1.2 — Scheduler eventos: persistencia TLV + admin MQTT (HA/Legacy)
 

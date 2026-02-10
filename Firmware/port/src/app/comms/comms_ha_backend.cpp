@@ -45,7 +45,7 @@ public:
                "%s/%s/cmd/outlet/%d", BASE_TOPIC, deviceId, i);
     }
 
-    // C1.2: schedule cmd/config topics
+    // Schedule cmd/config topics
     for (int i = 1; i <= 9; i++) {
       snprintf(_cmdScheduleTopic[i], sizeof(_cmdScheduleTopic[i]),
                "%s/%s/cmd/schedule/%d", BASE_TOPIC, deviceId, i);
@@ -54,6 +54,14 @@ public:
     }
     snprintf(_ackScheduleTopic, sizeof(_ackScheduleTopic),
              "%s/%s/cfg/schedule/ack", BASE_TOPIC, deviceId);
+
+    // Outlet auto topics (optional)
+    for (int i = 1; i <= 9; i++) {
+      snprintf(_cmdOutletAutoTopic[i], sizeof(_cmdOutletAutoTopic[i]),
+               "%s/%s/cmd/outlet_auto/%d", BASE_TOPIC, deviceId, i);
+      snprintf(_cfgOutletAutoTopic[i], sizeof(_cfgOutletAutoTopic[i]),
+               "%s/%s/cfg/outlet_auto/%d", BASE_TOPIC, deviceId, i);
+    }
 
     // Config admin topic
     snprintf(_cmdCfgTopic, sizeof(_cmdCfgTopic), "%s/%s/cmd/config", BASE_TOPIC, deviceId);
@@ -83,14 +91,19 @@ public:
       // Config admin
       (void)hal::mqtt().subscribe(_cmdCfgTopic);
 
-      // Outlets
+      // Outlets (manual)
       for (int i = 1; i <= 9; i++) {
         (void)hal::mqtt().subscribe(_cmdOutletTopic[i]);
       }
 
-      // C1.2: schedule commands
+      // Schedule commands
       for (int i = 1; i <= 9; i++) {
         (void)hal::mqtt().subscribe(_cmdScheduleTopic[i]);
+      }
+
+      // Outlet auto commands (optional)
+      for (int i = 1; i <= 9; i++) {
+        (void)hal::mqtt().subscribe(_cmdOutletAutoTopic[i]);
       }
 
       // Discovery
@@ -102,8 +115,9 @@ public:
       publishAvailability(true);
       publishStatePlaceholder();
 
-      // C1.2: publicar config schedule retenida para que HA/cliente lo vea tras reconnect
+      // Publicar cfg retained para schedule y outlet_auto
       publishAllSchedulesRetained();
+      publishAllOutletAutoRetained();
     }
 
     // publish periódico de estado (placeholder)
@@ -144,7 +158,7 @@ public:
     memcpy(_rx, payload, n);
     _rx[n] = '\0';
 
-    // C1.2: schedule cmd (JSON)
+    // Schedule cmd (JSON)
     for (int i = 1; i <= 9; i++) {
       if (strcmp(topic, _cmdScheduleTopic[i]) == 0) {
         handleScheduleCommand((uint8_t)(i - 1), _rx);
@@ -152,12 +166,24 @@ public:
       }
     }
 
-    // Outlets 1..9 (payload "0"/"1")
+    // Outlet auto cmd: payload "0"/"1"
+    for (int i = 1; i <= 9; i++) {
+      if (strcmp(topic, _cmdOutletAutoTopic[i]) == 0) {
+        const bool en = (_rx[0] == '1');
+        app::outlets::setAuto((uint8_t)(i - 1), en);
+        publishOutletAutoCfgRetained((uint8_t)(i - 1));
+        return;
+      }
+    }
+
+    // Outlets 1..9 (payload "0"/"1") -> Manual override (auto=false)
     for (int i = 1; i <= 9; i++) {
       if (strcmp(topic, _cmdOutletTopic[i]) == 0) {
         const uint8_t v = (_rx[0] == '1') ? 1 : 0;
         app::outlets::set((uint8_t)(i - 1), (v != 0));
         publishStatePlaceholder();
+        // publish outlet auto cfg (manual forces auto=false)
+        publishOutletAutoCfgRetained((uint8_t)(i - 1));
         return;
       }
     }
@@ -280,6 +306,25 @@ private:
     (void)hal::mqtt().publish(_ackScheduleTopic, (const uint8_t*)msg, strlen(msg), false);
   }
 
+  void publishOutletAutoCfgRetained(uint8_t ch) {
+    if (ch >= 9) return;
+    const bool a = app::outlets::isAuto(ch);
+
+    char msg[48];
+    snprintf(msg, sizeof(msg),
+             "{\"ch\":%u,\"auto\":%u}",
+             (unsigned)(ch + 1),
+             (unsigned)(a ? 1 : 0));
+
+    (void)hal::mqtt().publish(_cfgOutletAutoTopic[ch + 1], (const uint8_t*)msg, strlen(msg), true);
+  }
+
+  void publishAllOutletAutoRetained() {
+    for (uint8_t ch = 0; ch < 9; ++ch) {
+      publishOutletAutoCfgRetained(ch);
+    }
+  }
+
   void handleScheduleCommand(uint8_t ch, const char* json) {
     // Payload esperado: {"on":"HH:MM","off":"HH:MM","enabled":true}
     // Reglas:
@@ -328,6 +373,10 @@ private:
     const bool ok = app::scheduler::events::setWindow(ch, onHm, offHm, enabled);
     if (ok) {
       publishScheduleCfgRetained(ch);
+
+      // C2: política: enabled=true -> outlet auto=true, enabled=false -> auto=false
+      app::outlets::setAuto(ch, enabled);
+      publishOutletAutoCfgRetained(ch);
     }
     publishScheduleAck(ok, ch);
   }
@@ -385,15 +434,19 @@ private:
   // cmd topics outlets 1..9 (índice 1..9)
   char _cmdOutletTopic[10][96] = {{0}};
 
-  // C1.2 schedule cmd + cfg topics (índice 1..9)
+  // schedule cmd + cfg topics (índice 1..9)
   char _cmdScheduleTopic[10][96] = {{0}};
   char _cfgScheduleTopic[10][96] = {{0}};
   char _ackScheduleTopic[96] = {0};
 
+  // outlet auto cmd + cfg topics (índice 1..9)
+  char _cmdOutletAutoTopic[10][96] = {{0}};
+  char _cfgOutletAutoTopic[10][96] = {{0}};
+
   char _cmdCfgTopic[96] = {0};
 
   // rx small: schedule json is minimal; outlets are "0/1"
-  char _rx[64] = {0};
+  char _rx[96] = {0};
 };
 
 ICommsBackend& comms_ha_singleton() {
