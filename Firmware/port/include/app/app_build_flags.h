@@ -24,3 +24,9 @@
 #ifndef APP_SENSORS_USE_HW
 #define APP_SENSORS_USE_HW 0
 #endif
+
+// Control de temperatura (heater/chiller pines directos Mega):
+// 0 = solo cálculo (sin escribir GPIO), 1 = activa salidas reales vía hal_gpio.
+#ifndef APP_TEMPCTRL_USE_GPIO
+#define APP_TEMPCTRL_USE_GPIO 0
+#endif

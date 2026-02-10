@@ -1,4 +1,29 @@
 # ferduino-next — 07_CONTEXT.md (diario técnico y trazabilidad)
+
+## C2.1 — Fix integración temp_control con sensores actuales
+
+- Se corrige `app/temp_control` para adaptarse a la API real de `app::sensors::Temperatures`:
+  - Sustituye `temps.valid` por `temps.water_valid`
+  - Sustituye `temps.water_x10` por conversión `water_c -> x10`
+- Se mantiene el desacoplo de hardware mediante `APP_TEMPCTRL_USE_GPIO` (0 por defecto).
+
+
+## C2.1 — Port de control de temperatura (lógica) + cero duplicados de headers
+
+- Se crea módulo `app/temp_control` que porta la lógica de control de temperatura del proyecto original (heater/chiller):
+  - Lee `set/off/alarm` desde NVM registry (keys `100..102`, x10).
+  - Usa la lectura de agua desde `app/sensors` (FAKE por defecto).
+  - Calcula `heater_on`, `chiller_on` y `alarm_active`, con banda muerta y límites de seguridad (10°C..50°C).
+  - Evita heater/chiller activos simultáneamente.
+- El control está desacoplado del hardware:
+  - Flag nuevo `APP_TEMPCTRL_USE_GPIO` (0 por defecto) para activar escritura real a GPIO (`aquecedorPin=42`, `chillerPin=43`) cuando haya hardware.
+- Integración en `app/runtime/app_runtime.cpp`:
+  - `sensors::begin/loop`
+  - `tempctrl::begin/loop`
+- Limpieza de duplicidades:
+  - Se elimina `src/app/outlets/app_outlets.h` para evitar ambigüedad de includes (fuente única en `include/app/outlets/app_outlets.h`).
+
+
 ## C2 — Limpieza de duplicados de headers
 
 - Se elimina duplicidad detectada de `app_outlets.h` para evitar ambigüedad de include paths en PlatformIO:

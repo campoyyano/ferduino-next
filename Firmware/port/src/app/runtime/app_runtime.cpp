@@ -16,6 +16,9 @@
 #include "app/scheduler/app_scheduler.h"
 #include "app/scheduler/app_event_scheduler.h"
 
+#include "app/sensors/sensors.h"
+#include "app/temp_control/temp_control.h"
+
 #include "hal/hal_network.h"
 #include "hal/hal_mqtt.h"
 
@@ -65,6 +68,12 @@ void begin() {
   // B6.1: Motor de outlets (RAM + registry TLV). En modo stub por defecto.
   app::outlets::begin();
 
+  // B6.1a: Sensores (FAKE por defecto)
+  app::sensors::begin();
+
+  // C2.1: Control de temperatura (lógica; GPIO real opcional por flag)
+  app::tempctrl::begin();
+
   const auto& cfg = app::cfg::get();
   const hal::NetworkConfig net = toHalNetCfg(cfg.net);
   const hal::NetError ne = hal::network().begin(net);
@@ -87,13 +96,11 @@ void loop() {
   // C1.1: tick motor de eventos (reacciona al cambio de minuto)
   app::scheduler::events::loop();
 
-  // C2: aplicar estado deseado del scheduler SOLO a outlets en modo auto
-  // (manual commands deshabilitan auto en app::outlets::set)
-  for (uint8_t ch = 0; ch < app::outlets::count(); ++ch) {
-    if (app::scheduler::events::consumeDesiredChanged(ch)) {
-      (void)app::outlets::applyDesiredIfAuto(ch, app::scheduler::events::desiredOn(ch));
-    }
-  }
+  // B6.1a: tick sensores
+  app::sensors::loop();
+
+  // C2.1: tick control temperatura
+  app::tempctrl::loop();
 
   hal::network().loop();
   app::comms().loop();
